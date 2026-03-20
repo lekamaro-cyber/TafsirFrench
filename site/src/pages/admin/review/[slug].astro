@@ -61,12 +61,23 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
           </div>
         </div>
         <div style="text-align: right;">
-          <span class={`badge ${statusColors[surahInfo.status] || 'badge-draft'}`}>
+          <span class={`badge ${statusColors[surahInfo.status] || 'badge-draft'}`} id="surah-status-badge">
             {statusLabels[surahInfo.status] || surahInfo.status}
           </span>
           <div style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--color-text-muted);">
             {verses.length}/{meta.verses} versets &middot; {meta.type}
           </div>
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div class="validation-progress" style="margin-top: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <span style="font-size: 0.9rem; font-weight: 600;">Progression de la validation</span>
+          <span id="progress-text" style="font-size: 0.85rem; color: var(--color-text-muted);">Chargement...</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progress-bar" style="width: 0%;"></div>
         </div>
       </div>
 
@@ -98,22 +109,42 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       )}
 
       <div class="review-content">
-        <h2 style="font-size: 1.1rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-border);">
-          Tafsir JSON ({verses.length} versets)
-        </h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-border);">
+          <h2 style="font-size: 1.1rem;">
+            Tafsir JSON ({verses.length} versets)
+          </h2>
+          <div style="font-size: 0.85rem; color: var(--color-text-muted);">
+            5 votes requis par verset
+          </div>
+        </div>
 
         {verses.length === 0 ? (
           <p style="color: var(--color-text-muted); padding: 2rem 0;">Aucun verset trouve dans le JSON pour cette sourate.</p>
         ) : (
           verses.map((verse, i) => (
-            <div class="verse-review" id={`v${verse.number}`}>
+            <div class="verse-review" id={`v${verse.number}`} data-verse={verse.number}>
               <div class="verse-review-header">
-                <span class="verse-num">Verset {verse.number}</span>
-                <a href={`#v${verse.number}`} style="font-size: 0.8rem; color: var(--color-text-muted);">#</a>
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                  <span class="verse-num">Verset {verse.number}</span>
+                  <span class="verse-vote-badge" id={`badge-${verse.number}`}></span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <span class="vote-count" id={`count-${verse.number}`}></span>
+                  <button
+                    class="vote-btn"
+                    id={`vote-btn-${verse.number}`}
+                    data-surah={surahNumber}
+                    data-verse={verse.number}
+                    title="Voter pour valider ce verset"
+                  >
+                    Valider
+                  </button>
+                </div>
               </div>
               <div class="verse-review-text">
                 {verse.text}
               </div>
+              <div class="verse-voters" id={`voters-${verse.number}`}></div>
             </div>
           ))
         )}
@@ -127,15 +158,169 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     </div>
   </div>
 
-  <script>
+  <div id="toast" class="toast"></div>
+
+  <script define:vars={{ surahNumber, totalVerses: verses.length }}>
+    let currentUser = null;
+
     (async () => {
       try {
         const res = await fetch('/api/auth/me');
         if (!res.ok) throw new Error();
+        const data = await res.json();
+        currentUser = data.user;
       } catch {
         window.location.href = '/admin/login/';
+        return;
       }
+
+      // Initialize surah meta for vote tracking
+      await fetch('/api/votes/init-surah', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ surah: surahNumber, totalVerses }),
+      });
+
+      // Load existing votes
+      await loadVotes();
+
+      // Attach vote handlers
+      document.querySelectorAll('.vote-btn').forEach(btn => {
+        btn.addEventListener('click', handleVote);
+      });
     })();
+
+    async function loadVotes() {
+      try {
+        const res = await fetch(`/api/votes/surah/${surahNumber}?total=${totalVerses}`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        let validatedCount = 0;
+        for (let i = 1; i <= totalVerses; i++) {
+          const verseData = data.verses[i] || { votes: 0, required: 5, validated: false, hasVoted: false, voters: [] };
+          updateVerseUI(i, verseData);
+          if (verseData.validated) validatedCount++;
+        }
+
+        // Update progress bar
+        const pct = totalVerses > 0 ? Math.round((validatedCount / totalVerses) * 100) : 0;
+        document.getElementById('progress-bar').style.width = pct + '%';
+        document.getElementById('progress-text').textContent = `${validatedCount}/${totalVerses} versets valides (${pct}%)`;
+
+        if (data.surahValidated) {
+          document.getElementById('progress-bar').classList.add('complete');
+          const badge = document.getElementById('surah-status-badge');
+          if (badge) {
+            badge.className = 'badge badge-published';
+            badge.textContent = 'Validee par vote';
+          }
+        }
+      } catch (e) {
+        console.error('Erreur chargement votes:', e);
+      }
+    }
+
+    function updateVerseUI(verseNum, data) {
+      const badge = document.getElementById(`badge-${verseNum}`);
+      const count = document.getElementById(`count-${verseNum}`);
+      const btn = document.getElementById(`vote-btn-${verseNum}`);
+      const votersDiv = document.getElementById(`voters-${verseNum}`);
+      const verseEl = document.getElementById(`v${verseNum}`);
+
+      if (!badge || !count || !btn) return;
+
+      // Badge
+      if (data.validated) {
+        badge.textContent = 'Valide';
+        badge.className = 'verse-vote-badge validated';
+        verseEl?.classList.add('verse-validated');
+      } else if (data.votes > 0) {
+        badge.textContent = `${data.votes}/${data.required}`;
+        badge.className = 'verse-vote-badge in-progress';
+        verseEl?.classList.remove('verse-validated');
+      } else {
+        badge.textContent = '';
+        badge.className = 'verse-vote-badge';
+        verseEl?.classList.remove('verse-validated');
+      }
+
+      // Count
+      count.textContent = `${data.votes}/${data.required}`;
+
+      // Button state
+      if (data.hasVoted) {
+        btn.textContent = 'Retirer mon vote';
+        btn.classList.add('voted');
+      } else {
+        btn.textContent = 'Valider';
+        btn.classList.remove('voted');
+      }
+
+      // Voters list
+      if (votersDiv && data.voters && data.voters.length > 0) {
+        votersDiv.innerHTML = data.voters.map(v =>
+          `<span class="voter-chip">${v.name}</span>`
+        ).join('');
+      } else if (votersDiv) {
+        votersDiv.innerHTML = '';
+      }
+    }
+
+    async function handleVote(e) {
+      const btn = e.currentTarget;
+      const surah = parseInt(btn.dataset.surah);
+      const verse = parseInt(btn.dataset.verse);
+      const isRemoving = btn.classList.contains('voted');
+
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      try {
+        const res = await fetch('/api/votes/cast', {
+          method: isRemoving ? 'DELETE' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ surah, verse }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error, 'error');
+          btn.disabled = false;
+          btn.textContent = isRemoving ? 'Retirer mon vote' : 'Valider';
+          return;
+        }
+
+        updateVerseUI(verse, {
+          votes: data.votes,
+          required: data.required,
+          validated: data.validated,
+          hasVoted: !isRemoving,
+          voters: data.voters,
+        });
+
+        if (data.validated && !isRemoving) {
+          showToast(`Verset ${verse} valide !`, 'success');
+        }
+        if (data.surahValidated) {
+          showToast('Sourate entierement validee !', 'success');
+        }
+
+        // Reload all votes to update progress bar
+        await loadVotes();
+      } catch (e) {
+        showToast('Erreur de connexion.', 'error');
+      }
+
+      btn.disabled = false;
+    }
+
+    function showToast(message, type) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `toast show ${type}`;
+      setTimeout(() => toast.className = 'toast', 3000);
+    }
   </script>
 </BaseLayout>
 
@@ -165,12 +350,36 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     }
   }
 
-  .verse-review {
-    padding: 1rem 0;
-    border-bottom: 1px solid var(--color-border);
+  /* Progress bar */
+  .progress-bar-bg {
+    width: 100%;
+    height: 8px;
+    background: var(--color-border);
+    border-radius: 100px;
+    overflow: hidden;
   }
-  .verse-review:last-child {
-    border-bottom: none;
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--color-primary);
+    border-radius: 100px;
+    transition: width 0.5s ease;
+  }
+  .progress-bar-fill.complete {
+    background: var(--color-published);
+  }
+
+  /* Verse review blocks */
+  .verse-review {
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    background: var(--color-bg-alt);
+    transition: border-color 0.3s, background 0.3s;
+  }
+  .verse-review.verse-validated {
+    border-color: #86efac;
+    background: #f0fdf4;
   }
   .verse-review-header {
     display: flex;
@@ -187,5 +396,102 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     line-height: 1.8;
     font-size: 0.95rem;
     white-space: pre-wrap;
+  }
+
+  /* Vote badge on verse */
+  .verse-vote-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 100px;
+  }
+  .verse-vote-badge.validated {
+    background: #d1fae5;
+    color: #065f46;
+  }
+  .verse-vote-badge.in-progress {
+    background: #dbeafe;
+    color: #1e40af;
+  }
+
+  /* Vote button */
+  .vote-btn {
+    padding: 0.35rem 0.85rem;
+    border: 1px solid var(--color-primary);
+    background: white;
+    color: var(--color-primary);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .vote-btn:hover {
+    background: var(--color-primary);
+    color: white;
+  }
+  .vote-btn.voted {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+  }
+  .vote-btn.voted:hover {
+    background: #dc2626;
+    border-color: #dc2626;
+  }
+  .vote-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Vote count */
+  .vote-count {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    font-weight: 500;
+  }
+
+  /* Voters chips */
+  .verse-voters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+  }
+  .voter-chip {
+    font-size: 0.7rem;
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    padding: 0.15rem 0.5rem;
+    border-radius: 100px;
+    font-weight: 500;
+  }
+
+  /* Toast notifications */
+  .toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    pointer-events: none;
+  }
+  .toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+  .toast.success {
+    background: #065f46;
+    color: white;
+  }
+  .toast.error {
+    background: #dc2626;
+    color: white;
   }
 </style>

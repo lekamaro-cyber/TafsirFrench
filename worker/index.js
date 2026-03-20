@@ -1,4 +1,5 @@
 import { handleRegister, handleLogin, handleLogout, handleMe } from './auth.js';
+import { handleCastVote, handleRemoveVote, handleGetSurahVotes, handleGetVotesSummary, handleInitSurah } from './votes.js';
 
 export default {
   async fetch(request, env) {
@@ -17,6 +18,23 @@ export default {
     }
     if (pathname === '/api/auth/me' && request.method === 'GET') {
       return handleMe(request, env);
+    }
+
+    // Vote API routes
+    if (pathname === '/api/votes/cast' && request.method === 'POST') {
+      return handleCastVote(request, env);
+    }
+    if (pathname === '/api/votes/cast' && request.method === 'DELETE') {
+      return handleRemoveVote(request, env);
+    }
+    if (pathname.startsWith('/api/votes/surah/') && request.method === 'GET') {
+      return handleGetSurahVotes(request, env);
+    }
+    if (pathname === '/api/votes/summary' && request.method === 'GET') {
+      return handleGetVotesSummary(request, env);
+    }
+    if (pathname === '/api/votes/init-surah' && request.method === 'POST') {
+      return handleInitSurah(request, env);
     }
 
     // Everything else is handled by static assets (configured in wrangler.toml)

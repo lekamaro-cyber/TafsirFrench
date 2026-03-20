@@ -43,12 +43,22 @@ const all = getAllSurahs();
       </div>
     </div>
 
+    <!-- Vote validation progress -->
+    <div class="admin-section">
+      <h2>Validation collaborative</h2>
+      <p style="font-size: 0.9rem; color: var(--color-text-muted); margin-bottom: 1rem;">
+        Chaque verset necessite 5 votes pour etre valide. Une fois tous les versets valides, la sourate est automatiquement validee.
+      </p>
+      <div id="vote-progress-container" style="color: var(--color-text-muted); font-size: 0.9rem;">
+        Chargement des donnees de vote...
+      </div>
+    </div>
+
     <!-- Instructions -->
     <div style="margin: 1rem 0; padding: 1rem 1.25rem; background: #fefce8; border-radius: 8px; font-size: 0.9rem; border: 1px solid #fef08a;">
-      <strong>Workflow :</strong> Pour changer le statut d'une sourate, editez le fichier
-      <code>data/status.json</code>. Statuts : <code>draft</code> &rarr; <code>review</code> &rarr;
-      <code>scheduled</code> (+ <code>publish_date</code>) &rarr; <code>published</code>.
-      Puis relancez <code>npm run build</code>.
+      <strong>Workflow :</strong> Les sourates sont validees par le vote collaboratif des relecteurs.
+      Chaque verset necessite 5 votes. Quand tous les versets d'une sourate sont valides, la sourate
+      passe automatiquement en statut "validee". Cliquez sur "Relire" pour voter sur les versets.
     </div>
 
     <!-- En relecture -->
@@ -62,6 +72,7 @@ const all = getAllSurahs();
               <th>Sourate</th>
               <th>Arabe</th>
               <th>Versets</th>
+              <th>Validation</th>
               <th>Statut</th>
               <th>Actions</th>
             </tr>
@@ -73,8 +84,9 @@ const all = getAllSurahs();
                 <td>{s.name_fr}</td>
                 <td style="font-family: var(--font-arabic); direction: rtl;">{s.name_ar}</td>
                 <td>{s.tafsirVerseCount}/{s.verses}</td>
+                <td><span class="vote-progress-cell" data-surah={s.number}>-</span></td>
                 <td><span class="badge badge-review">Relecture</span></td>
-                <td><a href={`/admin/review/${s.slug}/`}>Relire</a></td>
+                <td><a href={`/admin/review/${s.slug}/`}>Relire & voter</a></td>
               </tr>
             ))}
           </tbody>
@@ -93,6 +105,7 @@ const all = getAllSurahs();
               <th>Sourate</th>
               <th>Arabe</th>
               <th>Versets tafsir</th>
+              <th>Validation</th>
               <th>Statut</th>
               <th>Actions</th>
             </tr>
@@ -104,8 +117,9 @@ const all = getAllSurahs();
                 <td>{s.name_fr}</td>
                 <td style="font-family: var(--font-arabic); direction: rtl;">{s.name_ar}</td>
                 <td>{s.tafsirVerseCount}/{s.verses}</td>
+                <td><span class="vote-progress-cell" data-surah={s.number}>-</span></td>
                 <td><span class="badge badge-draft">Brouillon</span></td>
-                <td><a href={`/admin/review/${s.slug}/`}>Voir</a></td>
+                <td><a href={`/admin/review/${s.slug}/`}>Voir & voter</a></td>
               </tr>
             ))}
           </tbody>
@@ -182,6 +196,72 @@ const all = getAllSurahs();
         document.getElementById('user-bar').style.display = 'flex';
       } catch {
         window.location.href = '/admin/login/';
+        return;
+      }
+
+      // Load vote summary
+      try {
+        const res = await fetch('/api/votes/summary');
+        if (res.ok) {
+          const { summary } = await res.json();
+          const container = document.getElementById('vote-progress-container');
+
+          const entries = Object.entries(summary);
+          if (entries.length === 0) {
+            container.innerHTML = '<p style="color: var(--color-text-muted);">Aucun vote enregistre pour le moment. Commencez par relire les sourates et voter sur les versets.</p>';
+          } else {
+            let totalValidated = 0;
+            let totalVerses = 0;
+            let completedSurahs = 0;
+
+            entries.forEach(([num, data]) => {
+              totalValidated += data.validatedCount || 0;
+              totalVerses += data.totalVerses || 0;
+              if (data.completed) completedSurahs++;
+            });
+
+            const pct = totalVerses > 0 ? Math.round((totalValidated / totalVerses) * 100) : 0;
+
+            container.innerHTML = `
+              <div style="display: flex; gap: 1.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                <div class="stat-card" style="flex: 1; min-width: 120px;">
+                  <div class="count" style="color: var(--color-primary);">${totalValidated}</div>
+                  <div class="label">Versets valides</div>
+                </div>
+                <div class="stat-card" style="flex: 1; min-width: 120px;">
+                  <div class="count" style="color: var(--color-published);">${completedSurahs}</div>
+                  <div class="label">Sourates validees</div>
+                </div>
+                <div class="stat-card" style="flex: 1; min-width: 120px;">
+                  <div class="count" style="color: var(--color-review);">${entries.length}</div>
+                  <div class="label">Sourates en cours</div>
+                </div>
+              </div>
+              <div style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;">
+                <span>Progression globale</span>
+                <span>${totalValidated}/${totalVerses} versets (${pct}%)</span>
+              </div>
+              <div style="width: 100%; height: 8px; background: var(--color-border); border-radius: 100px; overflow: hidden;">
+                <div style="height: 100%; width: ${pct}%; background: var(--color-primary); border-radius: 100px; transition: width 0.5s;"></div>
+              </div>
+            `;
+
+            // Update per-surah cells
+            document.querySelectorAll('.vote-progress-cell').forEach(cell => {
+              const surahNum = cell.dataset.surah;
+              const data = summary[surahNum];
+              if (data) {
+                const sp = Math.round((data.validatedCount / data.totalVerses) * 100);
+                cell.innerHTML = `<span style="font-size: 0.8rem;">${data.validatedCount}/${data.totalVerses} (${sp}%)</span>`;
+                if (data.completed) {
+                  cell.innerHTML = '<span class="badge badge-published" style="font-size: 0.7rem;">Validee</span>';
+                }
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Erreur chargement votes:', e);
       }
     })();
     document.getElementById('logout-btn')?.addEventListener('click', async () => {
