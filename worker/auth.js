@@ -276,55 +276,47 @@ export async function handleDeleteUser(request, env) {
 
 /**
  * POST /api/admin/bootstrap
- * Promotes the currently logged-in user to admin if no admin exists.
- * Also returns the list of all users for diagnostic purposes.
+ * Promotes the currently logged-in user to admin.
+ * Works even if users_list doesn't exist (pre-role accounts).
+ * Also rebuilds users_list from KV by scanning known user keys.
  */
 export async function handleBootstrapAdmin(request, env) {
-  const session = await getSessionWithRole(request, env);
-  if (!session) return jsonResponse({ error: 'Non authentifie.' }, 401);
+  // Get session directly (bypass role check)
+  const cookie = request.headers.get('Cookie') || '';
+  const match = cookie.match(/session=([^;]+)/);
+  if (!match) return jsonResponse({ error: 'Non authentifie.' }, 401);
+  const sessionData = await env.TAFSIR_AUTH.get(`session:${match[1]}`);
+  if (!sessionData) return jsonResponse({ error: 'Session expiree.' }, 401);
+  const session = JSON.parse(sessionData);
 
-  // Get all users
+  // Directly promote the current user in their KV record
+  const key = `user:${session.email}`;
+  const userData = await env.TAFSIR_AUTH.get(key);
+  if (!userData) return jsonResponse({ error: 'Utilisateur introuvable dans KV.' }, 404);
+
+  const user = JSON.parse(userData);
+  const previousRole = user.role || 'aucun';
+  user.role = 'admin';
+  await env.TAFSIR_AUTH.put(key, JSON.stringify(user));
+
+  // Rebuild users_list: add this user if not present
   const listData = await env.TAFSIR_AUTH.get('users_list');
   const userList = listData ? JSON.parse(listData) : [];
-
-  // Check if any admin exists
-  const admins = [];
-  for (const u of userList) {
-    const userData = await env.TAFSIR_AUTH.get(`user:${u.email}`);
-    if (userData) {
-      const user = JSON.parse(userData);
-      u.role = user.role || DEFAULT_ROLE;
-      if (u.role === 'admin') admins.push(u.email);
-    }
+  const idx = userList.findIndex(u => u.email === session.email);
+  if (idx >= 0) {
+    userList[idx].role = 'admin';
+  } else {
+    userList.push({ id: user.id, email: user.email, name: user.name, role: 'admin', created: user.created });
   }
-
-  let promoted = false;
-
-  if (admins.length === 0) {
-    // No admin exists → promote current user
-    const key = `user:${session.email}`;
-    const userData = await env.TAFSIR_AUTH.get(key);
-    if (userData) {
-      const user = JSON.parse(userData);
-      user.role = 'admin';
-      await env.TAFSIR_AUTH.put(key, JSON.stringify(user));
-
-      // Update users_list
-      const idx = userList.findIndex(u => u.email === session.email);
-      if (idx >= 0) {
-        userList[idx].role = 'admin';
-        await env.TAFSIR_AUTH.put('users_list', JSON.stringify(userList));
-      }
-      promoted = true;
-    }
-  }
+  await env.TAFSIR_AUTH.put('users_list', JSON.stringify(userList));
 
   return jsonResponse({
-    promoted,
+    ok: true,
+    promoted: true,
     currentUser: session.email,
+    previousRole,
+    newRole: 'admin',
     users: userList.map(u => ({ name: u.name, email: u.email, role: u.role, created: u.created })),
-    message: promoted
-      ? 'Vous etes maintenant administrateur. Reconnectez-vous pour appliquer.'
-      : 'Un administrateur existe deja (' + admins.join(', ') + '). Contactez-le pour changer votre role.',
+    message: 'Vous etes maintenant administrateur. Deconnectez-vous et reconnectez-vous pour appliquer.',
   });
 }
