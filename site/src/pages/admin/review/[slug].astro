@@ -354,23 +354,20 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       setTimeout(() => toast.className = 'toast', 3000);
     }
 
-    // ========== TEXT-TO-SPEECH ==========
+    // ========== TEXT-TO-SPEECH (Workers AI + browser fallback) ==========
     const synth = window.speechSynthesis;
     let ttsPlaying = false;
     let ttsCurrentVerse = null;
     let ttsPlayAllMode = false;
     let ttsPlayAllIndex = 0;
+    let currentAudio = null; // For Workers AI audio playback
+    let useWorkersAI = true; // Try Workers AI first, fallback to browser
     let frenchVoice = null;
 
-    // Check TTS support
-    if (!synth) {
-      document.getElementById('tts-unavailable').style.display = 'block';
-    }
-
-    // Find the best French voice
+    // Load browser voices as fallback
     function loadVoices() {
+      if (!synth) return;
       const voices = synth.getVoices();
-      // Prefer a natural/enhanced French voice
       frenchVoice = voices.find(v => v.lang.startsWith('fr') && v.name.toLowerCase().includes('natural'))
         || voices.find(v => v.lang.startsWith('fr') && v.name.toLowerCase().includes('enhanced'))
         || voices.find(v => v.lang.startsWith('fr') && !v.localService)
@@ -378,7 +375,7 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
         || null;
     }
     loadVoices();
-    if (synth.onvoiceschanged !== undefined) {
+    if (synth && synth.onvoiceschanged !== undefined) {
       synth.onvoiceschanged = loadVoices;
     }
 
@@ -387,7 +384,14 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     }
 
     function stopTTS() {
-      synth.cancel();
+      // Stop Workers AI audio
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentAudio = null;
+      }
+      // Stop browser TTS
+      if (synth) synth.cancel();
       ttsPlaying = false;
       ttsPlayAllMode = false;
       resetAllTTSButtons();
@@ -397,21 +401,25 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
 
     function resetAllTTSButtons() {
       document.querySelectorAll('.tts-verse-btn').forEach(btn => {
-        btn.classList.remove('playing');
+        btn.classList.remove('playing', 'loading');
         btn.querySelector('.tts-icon-play').style.display = '';
         btn.querySelector('.tts-icon-stop').style.display = 'none';
       });
     }
 
-    function setVerseBtnPlaying(verseNum, playing) {
+    function setVerseBtnPlaying(verseNum, state) {
       const btn = document.getElementById(`tts-btn-${verseNum}`);
       if (!btn) return;
-      if (playing) {
+      btn.classList.remove('playing', 'loading');
+      if (state === 'playing') {
         btn.classList.add('playing');
         btn.querySelector('.tts-icon-play').style.display = 'none';
         btn.querySelector('.tts-icon-stop').style.display = '';
+      } else if (state === 'loading') {
+        btn.classList.add('loading');
+        btn.querySelector('.tts-icon-play').style.display = 'none';
+        btn.querySelector('.tts-icon-stop').style.display = '';
       } else {
-        btn.classList.remove('playing');
         btn.querySelector('.tts-icon-play').style.display = '';
         btn.querySelector('.tts-icon-stop').style.display = 'none';
       }
@@ -442,11 +450,107 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       document.querySelectorAll('.verse-speaking').forEach(el => el.classList.remove('verse-speaking'));
     }
 
-    function speakVerse(verseNum) {
-      const textEl = document.querySelector(`#v${verseNum} .verse-review-text`);
-      if (!textEl) return;
-      const text = textEl.textContent.trim();
-      if (!text) return;
+    function onVerseEnd(verseNum) {
+      setVerseBtnPlaying(verseNum, 'stopped');
+      removeTextHighlight();
+      ttsPlaying = false;
+      ttsCurrentVerse = null;
+
+      if (ttsPlayAllMode) {
+        ttsPlayAllIndex++;
+        const allVerseEls = document.querySelectorAll('.verse-review[data-verse]');
+        if (ttsPlayAllIndex < allVerseEls.length) {
+          const nextVerse = parseInt(allVerseEls[ttsPlayAllIndex].dataset.verse);
+          speakVerse(nextVerse);
+        } else {
+          ttsPlayAllMode = false;
+          updatePlayAllBtn(false);
+        }
+      }
+    }
+
+    function onVerseError(verseNum) {
+      setVerseBtnPlaying(verseNum, 'stopped');
+      removeTextHighlight();
+      ttsPlaying = false;
+      ttsCurrentVerse = null;
+      ttsPlayAllMode = false;
+      updatePlayAllBtn(false);
+    }
+
+    // ---- Workers AI TTS (natural voice via MeloTTS) ----
+    const audioCache = {};
+
+    async function speakVerseAI(verseNum, text) {
+      ttsPlaying = true;
+      ttsCurrentVerse = verseNum;
+      setVerseBtnPlaying(verseNum, 'loading');
+      highlightVerse(verseNum);
+
+      try {
+        let audioUrl = audioCache[`${surahNumber}:${verseNum}`];
+
+        if (!audioUrl) {
+          const res = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+          });
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            if (err.fallback) {
+              // Workers AI unavailable, switch to browser TTS
+              useWorkersAI = false;
+              showToast('Voix IA indisponible, utilisation de la voix navigateur.', 'error');
+              speakVerseBrowser(verseNum, text);
+              return;
+            }
+            throw new Error(err.error || 'Erreur TTS');
+          }
+
+          const blob = await res.blob();
+          audioUrl = URL.createObjectURL(blob);
+          audioCache[`${surahNumber}:${verseNum}`] = audioUrl;
+        }
+
+        if (currentAudio) {
+          currentAudio.pause();
+          currentAudio = null;
+        }
+
+        const audio = new Audio(audioUrl);
+        audio.playbackRate = getSpeed();
+        currentAudio = audio;
+
+        setVerseBtnPlaying(verseNum, 'playing');
+
+        audio.onended = () => {
+          currentAudio = null;
+          onVerseEnd(verseNum);
+        };
+        audio.onerror = () => {
+          currentAudio = null;
+          onVerseError(verseNum);
+        };
+
+        await audio.play();
+      } catch (e) {
+        console.error('Workers AI TTS error:', e);
+        // Fallback to browser TTS
+        useWorkersAI = false;
+        showToast('Voix IA indisponible, utilisation de la voix navigateur.', 'error');
+        speakVerseBrowser(verseNum, text);
+      }
+    }
+
+    // ---- Browser TTS fallback ----
+    function speakVerseBrowser(verseNum, text) {
+      if (!synth) {
+        document.getElementById('tts-unavailable').style.display = 'block';
+        onVerseError(verseNum);
+        return;
+      }
 
       synth.cancel();
       resetAllTTSButtons();
@@ -459,40 +563,13 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
 
       ttsPlaying = true;
       ttsCurrentVerse = verseNum;
-      setVerseBtnPlaying(verseNum, true);
+      setVerseBtnPlaying(verseNum, 'playing');
       highlightVerse(verseNum);
 
-      utterance.onend = () => {
-        setVerseBtnPlaying(verseNum, false);
-        removeTextHighlight();
-        ttsPlaying = false;
-        ttsCurrentVerse = null;
+      utterance.onend = () => onVerseEnd(verseNum);
+      utterance.onerror = () => onVerseError(verseNum);
 
-        // If in play-all mode, read next verse
-        if (ttsPlayAllMode) {
-          ttsPlayAllIndex++;
-          const allVerseEls = document.querySelectorAll('.verse-review[data-verse]');
-          if (ttsPlayAllIndex < allVerseEls.length) {
-            const nextVerse = parseInt(allVerseEls[ttsPlayAllIndex].dataset.verse);
-            speakVerse(nextVerse);
-          } else {
-            ttsPlayAllMode = false;
-            updatePlayAllBtn(false);
-          }
-        }
-      };
-
-      utterance.onerror = () => {
-        setVerseBtnPlaying(verseNum, false);
-        removeTextHighlight();
-        ttsPlaying = false;
-        ttsCurrentVerse = null;
-        ttsPlayAllMode = false;
-        updatePlayAllBtn(false);
-      };
-
-      // Chrome bug workaround: long texts get cut off
-      // Resume speech periodically to prevent Chrome from stopping
+      // Chrome workaround for long texts
       let resumeInterval = null;
       utterance.onstart = () => {
         resumeInterval = setInterval(() => {
@@ -503,17 +580,27 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
         }, 10000);
       };
       const origOnEnd = utterance.onend;
-      utterance.onend = (e) => {
-        clearInterval(resumeInterval);
-        origOnEnd(e);
-      };
+      utterance.onend = (e) => { clearInterval(resumeInterval); origOnEnd(e); };
       const origOnError = utterance.onerror;
-      utterance.onerror = (e) => {
-        clearInterval(resumeInterval);
-        origOnError(e);
-      };
+      utterance.onerror = (e) => { clearInterval(resumeInterval); origOnError(e); };
 
       synth.speak(utterance);
+    }
+
+    // ---- Main speak function (picks AI or browser) ----
+    function speakVerse(verseNum) {
+      const textEl = document.querySelector(`#v${verseNum} .verse-review-text`);
+      if (!textEl) return;
+      const text = textEl.textContent.trim();
+      if (!text) return;
+
+      stopTTS();
+
+      if (useWorkersAI) {
+        speakVerseAI(verseNum, text);
+      } else {
+        speakVerseBrowser(verseNum, text);
+      }
     }
 
     // Per-verse play/stop buttons
@@ -545,21 +632,30 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       speakVerse(firstVerse);
     });
 
-    // Speed change: restart current reading at new speed
+    // Speed change applies to current playback
     document.getElementById('tts-speed')?.addEventListener('change', () => {
-      if (ttsPlaying && ttsCurrentVerse) {
+      const speed = getSpeed();
+      // If Workers AI audio is playing, adjust playback rate directly
+      if (currentAudio && ttsPlaying) {
+        currentAudio.playbackRate = speed;
+      }
+      // If browser TTS is playing, restart at new speed
+      if (!currentAudio && ttsPlaying && ttsCurrentVerse && synth.speaking) {
         const v = ttsCurrentVerse;
         const wasPlayAll = ttsPlayAllMode;
         const wasIndex = ttsPlayAllIndex;
         synth.cancel();
         ttsPlayAllMode = wasPlayAll;
         ttsPlayAllIndex = wasIndex;
-        speakVerse(v);
+        speakVerseBrowser(v, document.querySelector(`#v${v} .verse-review-text`)?.textContent?.trim());
       }
     });
 
     // Stop TTS when leaving the page
-    window.addEventListener('beforeunload', () => synth.cancel());
+    window.addEventListener('beforeunload', () => {
+      if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+      if (synth) synth.cancel();
+    });
   </script>
 </BaseLayout>
 
@@ -776,9 +872,19 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     border-color: var(--color-primary);
     animation: tts-pulse 1.5s infinite;
   }
+  .tts-verse-btn.loading {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #fbbf24;
+    animation: tts-loading-spin 1s linear infinite;
+  }
   @keyframes tts-pulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(14, 124, 97, 0.3); }
     50% { box-shadow: 0 0 0 6px rgba(14, 124, 97, 0); }
+  }
+  @keyframes tts-loading-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
 
   /* Verse highlight during speech */

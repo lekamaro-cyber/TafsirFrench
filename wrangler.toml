@@ -8,3 +8,6 @@ directory = "./site/dist"
 [[kv_namespaces]]
 binding = "TAFSIR_AUTH"
 id = "2358aae9ee1a488199050694db689654"
+
+[ai]
+binding = "AI"
