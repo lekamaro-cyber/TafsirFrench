@@ -11,7 +11,7 @@ const all = getAllSurahs();
     <div class="admin-header">
       <h1>Gestion du contenu</h1>
       <p style="color: var(--color-text-muted); margin-top: 0.25rem;">
-        Relecture, validation et planification de la publication
+        Relecture, validation et planification de la publication &mdash; {all.length} sourates, 6236 versets
       </p>
     </div>
 
@@ -35,10 +35,18 @@ const all = getAllSurahs();
       </div>
     </div>
 
+    <!-- Instructions -->
+    <div style="margin: 1rem 0; padding: 1rem 1.25rem; background: #fefce8; border-radius: 8px; font-size: 0.9rem; border: 1px solid #fef08a;">
+      <strong>Workflow :</strong> Pour changer le statut d'une sourate, editez le fichier
+      <code>data/status.json</code>. Statuts : <code>draft</code> &rarr; <code>review</code> &rarr;
+      <code>scheduled</code> (+ <code>publish_date</code>) &rarr; <code>published</code>.
+      Puis relancez <code>npm run build</code>.
+    </div>
+
     <!-- En relecture -->
     {groups.review.length > 0 && (
       <div class="admin-section">
-        <h2>En attente de relecture</h2>
+        <h2>En attente de relecture ({groups.review.length})</h2>
         <table class="admin-table">
           <thead>
             <tr>
@@ -53,10 +61,10 @@ const all = getAllSurahs();
           <tbody>
             {groups.review.map(s => (
               <tr>
-                <td>{s.frontmatter.number}</td>
-                <td>{s.frontmatter.name_fr}</td>
-                <td style="font-family: var(--font-arabic); direction: rtl;">{s.frontmatter.name_ar}</td>
-                <td>{s.frontmatter.verses_count}</td>
+                <td>{s.number}</td>
+                <td>{s.name_fr}</td>
+                <td style="font-family: var(--font-arabic); direction: rtl;">{s.name_ar}</td>
+                <td>{s.tafsirVerseCount}/{s.verses}</td>
                 <td><span class="badge badge-review">Relecture</span></td>
                 <td><a href={`/admin/review/${s.slug}/`}>Relire</a></td>
               </tr>
@@ -69,14 +77,14 @@ const all = getAllSurahs();
     <!-- Brouillons -->
     {groups.draft.length > 0 && (
       <div class="admin-section">
-        <h2>Brouillons</h2>
+        <h2>Brouillons ({groups.draft.length})</h2>
         <table class="admin-table">
           <thead>
             <tr>
               <th>N</th>
               <th>Sourate</th>
               <th>Arabe</th>
-              <th>Versets</th>
+              <th>Versets tafsir</th>
               <th>Statut</th>
               <th>Actions</th>
             </tr>
@@ -84,10 +92,10 @@ const all = getAllSurahs();
           <tbody>
             {groups.draft.map(s => (
               <tr>
-                <td>{s.frontmatter.number}</td>
-                <td>{s.frontmatter.name_fr}</td>
-                <td style="font-family: var(--font-arabic); direction: rtl;">{s.frontmatter.name_ar}</td>
-                <td>{s.frontmatter.verses_count}</td>
+                <td>{s.number}</td>
+                <td>{s.name_fr}</td>
+                <td style="font-family: var(--font-arabic); direction: rtl;">{s.name_ar}</td>
+                <td>{s.tafsirVerseCount}/{s.verses}</td>
                 <td><span class="badge badge-draft">Brouillon</span></td>
                 <td><a href={`/admin/review/${s.slug}/`}>Voir</a></td>
               </tr>
@@ -100,7 +108,7 @@ const all = getAllSurahs();
     <!-- Planifiees -->
     {groups.scheduled.length > 0 && (
       <div class="admin-section">
-        <h2>Publication planifiee</h2>
+        <h2>Publication planifiee ({groups.scheduled.length})</h2>
         <table class="admin-table">
           <thead>
             <tr>
@@ -109,16 +117,18 @@ const all = getAllSurahs();
               <th>Date de publication</th>
               <th>Relecteur</th>
               <th>Statut</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {groups.scheduled.map(s => (
               <tr>
-                <td>{s.frontmatter.number}</td>
-                <td>{s.frontmatter.name_fr}</td>
-                <td>{s.frontmatter.publish_date || '-'}</td>
-                <td>{s.frontmatter.reviewer || '-'}</td>
+                <td>{s.number}</td>
+                <td>{s.name_fr}</td>
+                <td>{s.publish_date || '-'}</td>
+                <td>{s.reviewer || '-'}</td>
                 <td><span class="badge badge-scheduled">Planifiee</span></td>
+                <td><a href={`/admin/review/${s.slug}/`}>Voir</a></td>
               </tr>
             ))}
           </tbody>
@@ -129,40 +139,27 @@ const all = getAllSurahs();
     <!-- Publiees -->
     {groups.published.length > 0 && (
       <div class="admin-section">
-        <h2>Publiees</h2>
+        <h2>Publiees ({groups.published.length})</h2>
         <table class="admin-table">
           <thead>
             <tr>
               <th>N</th>
               <th>Sourate</th>
-              <th>Date de publication</th>
+              <th>Date</th>
               <th>Lien</th>
             </tr>
           </thead>
           <tbody>
             {groups.published.map(s => (
               <tr>
-                <td>{s.frontmatter.number}</td>
-                <td>{s.frontmatter.name_fr}</td>
-                <td>{s.frontmatter.publish_date || '-'}</td>
+                <td>{s.number}</td>
+                <td>{s.name_fr}</td>
+                <td>{s.publish_date || '-'}</td>
                 <td><a href={`/surahs/${s.slug}/`}>Voir sur le site</a></td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-    )}
-
-    <!-- Aucun contenu -->
-    {all.length === 0 && (
-      <div style="text-align: center; padding: 3rem 0; color: var(--color-text-muted);">
-        <p style="font-size: 1.2rem;">Aucun contenu trouve.</p>
-        <p style="margin-top: 0.5rem;">
-          Ajoutez des fichiers Markdown dans le dossier <code>data/surahs/</code>
-        </p>
-        <p style="margin-top: 0.25rem;">
-          Consultez <code>data/README.md</code> pour le format attendu.
-        </p>
       </div>
     )}
   </div>

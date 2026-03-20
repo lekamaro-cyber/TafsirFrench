@@ -3,51 +3,45 @@
 /**
  * Script de publication planifiee.
  *
- * Parcourt tous les fichiers de sourates et passe en "published"
- * ceux qui ont le statut "scheduled" et dont la publish_date <= aujourd'hui.
+ * Parcourt le fichier status.json et passe en "published"
+ * les sourates qui ont le statut "scheduled" et dont publish_date <= aujourd'hui.
  *
  * Usage :
- *   node scripts/publish-scheduled.js
+ *   cd site && node scripts/publish-scheduled.js
  *
- * Peut etre execute via un cron job ou un CI/CD pipeline :
- *   0 6 * * * cd /path/to/site && node scripts/publish-scheduled.js && npm run build
+ * Automatiser avec cron :
+ *   0 6 * * * cd /path/to/TafsirFrench/site && node scripts/publish-scheduled.js && npm run build
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
-import matter from 'gray-matter';
 
-const DATA_DIR = path.resolve(process.cwd(), '../data/surahs');
+const STATUS_PATH = path.resolve(process.cwd(), '../data/status.json');
 
 function main() {
-  if (!fs.existsSync(DATA_DIR)) {
-    console.log('Dossier data/surahs/ non trouve.');
+  if (!fs.existsSync(STATUS_PATH)) {
+    console.log('Fichier data/status.json non trouve. Lancez d\'abord npm run build pour le generer.');
     return;
   }
 
   const today = new Date().toISOString().split('T')[0];
-  const files = fs.readdirSync(DATA_DIR).filter(f => f.endsWith('.md'));
+  const status = JSON.parse(fs.readFileSync(STATUS_PATH, 'utf-8'));
 
   let published = 0;
 
-  for (const file of files) {
-    const filePath = path.join(DATA_DIR, file);
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const { data, content } = matter(raw);
-
-    if (data.status === 'scheduled' && data.publish_date && data.publish_date <= today) {
-      data.status = 'published';
-      const updated = matter.stringify(content, data);
-      fs.writeFileSync(filePath, updated, 'utf-8');
-      console.log(`[PUBLIE] ${file} (date: ${data.publish_date})`);
+  for (const [surahNum, info] of Object.entries(status)) {
+    if (info.status === 'scheduled' && info.publish_date && info.publish_date <= today) {
+      info.status = 'published';
+      console.log(`[PUBLIE] Sourate ${surahNum} (date: ${info.publish_date})`);
       published++;
     }
   }
 
-  if (published === 0) {
-    console.log('Aucune sourate a publier aujourd\'hui.');
-  } else {
+  if (published > 0) {
+    fs.writeFileSync(STATUS_PATH, JSON.stringify(status, null, 2), 'utf-8');
     console.log(`\n${published} sourate(s) publiee(s). Relancez "npm run build" pour mettre a jour le site.`);
+  } else {
+    console.log('Aucune sourate a publier aujourd\'hui.');
   }
 }
 

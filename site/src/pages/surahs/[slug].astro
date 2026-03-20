@@ -1,39 +1,36 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { getPublishedSurahs, getSurah, parseVerses } from '../../lib/content.js';
+import { getPublishedSurahs, getSurahMeta, getSurahTafsir } from '../../lib/content.js';
 
 export function getStaticPaths() {
   const surahs = getPublishedSurahs();
-  return surahs.map(s => ({ params: { slug: s.slug } }));
+  return surahs.map(s => ({
+    params: { slug: s.slug },
+    props: { surahNumber: s.number },
+  }));
 }
 
-const { slug } = Astro.params;
-const surah = getSurah(slug);
-
-if (!surah) {
-  return Astro.redirect('/404');
-}
-
-const verses = parseVerses(surah.rawContent);
-const { frontmatter } = surah;
+const { surahNumber } = Astro.props;
+const meta = getSurahMeta(surahNumber);
+const verses = getSurahTafsir(surahNumber);
 ---
 
-<BaseLayout title={`${frontmatter.name_fr} - ${frontmatter.name_ar}`}>
+<BaseLayout title={`${meta.name_fr} - ${meta.name_ar}`}>
   <div class="container">
     <div class="surah-header">
-      <div class="name-ar">{frontmatter.name_ar}</div>
-      <h1>{frontmatter.name_fr}</h1>
+      <div class="name-ar">{meta.name_ar}</div>
+      <h1>{meta.name_fr}</h1>
       <p class="info">
-        Sourate {frontmatter.number} &middot;
-        {frontmatter.verses_count} versets &middot;
-        Revelation {frontmatter.revelation_type}
+        Sourate {meta.number} &middot;
+        {meta.verses} versets &middot;
+        Revelation {meta.type}
       </p>
     </div>
 
     {verses.map(verse => (
       <div class="verse-section">
         <h2>Verset {verse.number}</h2>
-        <Fragment set:html={verse.html} />
+        <p>{verse.text}</p>
       </div>
     ))}
 

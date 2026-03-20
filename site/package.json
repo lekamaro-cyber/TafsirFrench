@@ -4,15 +4,14 @@
   "version": "1.0.0",
   "description": "Plateforme de publication du Tafsir en francais",
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro build",
+    "dev": "node scripts/copy-pdfs.js && astro dev",
+    "build": "node scripts/copy-pdfs.js && astro build",
     "preview": "astro preview",
     "sync": "node scripts/sync-content.js",
-    "publish-scheduled": "node scripts/publish-scheduled.js"
+    "publish-scheduled": "node scripts/publish-scheduled.js",
+    "copy-pdfs": "node scripts/copy-pdfs.js"
   },
   "dependencies": {
-    "astro": "^4.16.0",
-    "gray-matter": "^4.0.3",
-    "marked": "^14.0.0"
+    "astro": "^4.16.0"
   }
 }

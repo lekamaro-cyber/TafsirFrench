@@ -16,11 +16,11 @@ const surahs = getPublishedSurahs();
         <div class="surah-grid">
           {surahs.map(surah => (
             <a href={`/surahs/${surah.slug}/`} class="surah-card" style="text-decoration: none; color: inherit;">
-              <span class="number">{surah.frontmatter.number}</span>
-              <h3>{surah.frontmatter.name_fr}</h3>
-              <div class="name-ar">{surah.frontmatter.name_ar}</div>
+              <span class="number">{surah.number}</span>
+              <h3>{surah.name_fr}</h3>
+              <div class="name-ar">{surah.name_ar}</div>
               <div class="meta">
-                {surah.frontmatter.verses_count} versets &middot; {surah.frontmatter.revelation_type}
+                {surah.verses} versets &middot; {surah.type}
               </div>
             </a>
           ))}

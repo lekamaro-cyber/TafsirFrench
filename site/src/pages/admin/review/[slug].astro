@@ -1,21 +1,22 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
-import { getAllSurahs, getSurah, parseVerses } from '../../../lib/content.js';
+import { getAllSurahs, getSurahMeta, getSurahTafsir, hasPdf } from '../../../lib/content.js';
 
 export function getStaticPaths() {
   const surahs = getAllSurahs();
-  return surahs.map(s => ({ params: { slug: s.slug } }));
+  return surahs.map(s => ({
+    params: { slug: s.slug },
+    props: { surahNumber: s.number },
+  }));
 }
 
-const { slug } = Astro.params;
-const surah = getSurah(slug);
-
-if (!surah) {
-  return Astro.redirect('/admin/');
-}
-
-const verses = parseVerses(surah.rawContent);
-const { frontmatter } = surah;
+const { surahNumber } = Astro.props;
+const meta = getSurahMeta(surahNumber);
+const allSurahs = getAllSurahs();
+const surahInfo = allSurahs.find(s => s.number === surahNumber);
+const verses = getSurahTafsir(surahNumber);
+const pdfExists = hasPdf(surahNumber);
+const pdfNum = String(surahNumber).padStart(3, '0');
 
 const statusColors = {
   draft: 'badge-draft',
@@ -29,13 +30,23 @@ const statusLabels = {
   scheduled: 'Planifiee',
   published: 'Publiee',
 };
+
+// Navigation: prev/next
+const prevSurah = surahNumber > 1 ? allSurahs.find(s => s.number === surahNumber - 1) : null;
+const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumber + 1) : null;
 ---
 
-<BaseLayout title={`Relecture - ${frontmatter.name_fr}`}>
-  <div class="container">
-    <!-- Breadcrumb -->
-    <div style="padding: 1rem 0; font-size: 0.9rem; color: var(--color-text-muted);">
-      <a href="/admin/">Gestion</a> &raquo; Relecture
+<BaseLayout title={`Relecture - ${meta.name_fr}`}>
+  <div class="container-wide">
+    <!-- Breadcrumb + nav -->
+    <div style="padding: 1rem 0; font-size: 0.9rem; color: var(--color-text-muted); display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <a href="/admin/">Gestion</a> &raquo; Relecture &raquo; Sourate {surahNumber}
+      </div>
+      <div style="display: flex; gap: 1rem;">
+        {prevSurah && <a href={`/admin/review/${prevSurah.slug}/`}>&larr; {prevSurah.name_fr}</a>}
+        {nextSurah && <a href={`/admin/review/${nextSurah.slug}/`}>{nextSurah.name_fr} &rarr;</a>}
+      </div>
     </div>
 
     <!-- Surah info panel -->
@@ -43,61 +54,118 @@ const statusLabels = {
       <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
         <div>
           <h1 style="font-size: 1.6rem; margin-bottom: 0.25rem;">
-            Sourate {frontmatter.number} - {frontmatter.name_fr}
+            Sourate {meta.number} - {meta.name_fr}
           </h1>
           <div style="font-family: var(--font-arabic); font-size: 1.5rem; direction: rtl; color: var(--color-primary);">
-            {frontmatter.name_ar}
+            {meta.name_ar}
           </div>
         </div>
         <div style="text-align: right;">
-          <span class={`badge ${statusColors[frontmatter.status] || 'badge-draft'}`}>
-            {statusLabels[frontmatter.status] || frontmatter.status}
+          <span class={`badge ${statusColors[surahInfo.status] || 'badge-draft'}`}>
+            {statusLabels[surahInfo.status] || surahInfo.status}
           </span>
           <div style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--color-text-muted);">
-            {frontmatter.verses_count} versets &middot; {frontmatter.revelation_type}
+            {verses.length}/{meta.verses} versets &middot; {meta.type}
           </div>
         </div>
       </div>
 
-      <!-- Metadata -->
       <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border); display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.9rem;">
-        <div>
-          <strong>Relecteur :</strong> {frontmatter.reviewer || 'Non assigne'}
-        </div>
-        <div>
-          <strong>Derniere relecture :</strong> {frontmatter.last_reviewed || 'Jamais'}
-        </div>
-        <div>
-          <strong>Publication prevue :</strong> {frontmatter.publish_date || 'Non planifiee'}
-        </div>
+        <div><strong>Relecteur :</strong> {surahInfo.reviewer || 'Non assigne'}</div>
+        <div><strong>Derniere relecture :</strong> {surahInfo.last_reviewed || 'Jamais'}</div>
+        <div><strong>Publication prevue :</strong> {surahInfo.publish_date || 'Non planifiee'}</div>
+        {pdfExists && (
+          <div><strong>PDF de reference :</strong> <a href={`/pdf/${pdfNum}.pdf`} target="_blank">Ouvrir le PDF</a></div>
+        )}
       </div>
 
-      <!-- Instructions -->
-      <div style="margin-top: 1rem; padding: 1rem; background: #fefce8; border-radius: 8px; font-size: 0.9rem;">
-        <strong>Pour modifier le statut :</strong> editez le champ <code>status</code> dans le frontmatter
-        du fichier <code>data/surahs/{slug}.md</code>.
-        Statuts possibles : <code>draft</code>, <code>review</code>, <code>scheduled</code>, <code>published</code>.
-        Pour planifier, ajoutez aussi <code>publish_date: "YYYY-MM-DD"</code>.
+      {surahInfo.notes && (
+        <div style="margin-top: 0.75rem; padding: 0.75rem; background: #f0f9ff; border-radius: 6px; font-size: 0.9rem;">
+          <strong>Notes :</strong> {surahInfo.notes}
+        </div>
+      )}
+    </div>
+
+    <!-- Layout: PDF + Tafsir side by side -->
+    <div class="review-layout">
+      {pdfExists && (
+        <div class="review-pdf">
+          <h2 style="font-size: 1.1rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-border);">
+            PDF de reference
+          </h2>
+          <iframe src={`/pdf/${pdfNum}.pdf`} style="width: 100%; height: 80vh; border: 1px solid var(--color-border); border-radius: 8px;"></iframe>
+        </div>
+      )}
+
+      <div class="review-content">
+        <h2 style="font-size: 1.1rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-border);">
+          Tafsir JSON ({verses.length} versets)
+        </h2>
+
+        {verses.length === 0 ? (
+          <p style="color: var(--color-text-muted); padding: 2rem 0;">Aucun verset trouve dans le JSON pour cette sourate.</p>
+        ) : (
+          verses.map((verse, i) => (
+            <div class="verse-review" id={`v${verse.number}`}>
+              <div class="verse-review-header">
+                <span class="verse-num">Verset {verse.number}</span>
+                <a href={`#v${verse.number}`} style="font-size: 0.8rem; color: var(--color-text-muted);">#</a>
+              </div>
+              <div class="verse-review-text">
+                {verse.text}
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
 
-    <!-- Verses content -->
-    <h2 style="font-size: 1.3rem; margin-bottom: 1.5rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-border);">
-      Contenu ({verses.length} versets)
-    </h2>
-
-    {verses.map((verse, i) => (
-      <div class="verse-section" style="position: relative;">
-        <div style="position: absolute; right: 0; top: 2rem; font-size: 0.75rem; color: var(--color-text-muted);">
-          #{verse.number}
-        </div>
-        <h2>Verset {verse.number}</h2>
-        <Fragment set:html={verse.html} />
-      </div>
-    ))}
-
-    <div style="text-align: center; padding: 2rem 0;">
-      <a href="/admin/">&larr; Retour a la gestion</a>
+    <div style="text-align: center; padding: 2rem 0; display: flex; justify-content: center; gap: 2rem;">
+      {prevSurah && <a href={`/admin/review/${prevSurah.slug}/`}>&larr; Sourate {prevSurah.number}</a>}
+      <a href="/admin/">Retour a la gestion</a>
+      {nextSurah && <a href={`/admin/review/${nextSurah.slug}/`}>Sourate {nextSurah.number} &rarr;</a>}
     </div>
   </div>
 </BaseLayout>
+
+<style>
+  .review-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+  .review-layout:has(.review-pdf:empty),
+  .review-layout:not(:has(.review-pdf)) {
+    grid-template-columns: 1fr;
+  }
+
+  @media (max-width: 1024px) {
+    .review-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .verse-review {
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .verse-review:last-child {
+    border-bottom: none;
+  }
+  .verse-review-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+  .verse-num {
+    font-weight: 700;
+    color: var(--color-primary);
+    font-size: 0.95rem;
+  }
+  .verse-review-text {
+    line-height: 1.8;
+    font-size: 0.95rem;
+    white-space: pre-wrap;
+  }
+</style>
