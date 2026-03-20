@@ -83,8 +83,8 @@ export async function handleReviewCorrection(request, env) {
     return jsonResponse({ error: 'Cette correction a deja ete traitee.' }, 400);
   }
 
-  // Cannot review your own correction
-  if (correction.authorId === session.userId) {
+  // Cannot review your own correction (unless admin)
+  if (correction.authorId === session.userId && session.role !== 'admin') {
     return jsonResponse({ error: 'Vous ne pouvez pas valider votre propre correction.' }, 403);
   }
 
