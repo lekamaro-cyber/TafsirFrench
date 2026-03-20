@@ -312,8 +312,8 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
         body: JSON.stringify({ surah: surahNumber, totalVerses }),
       });
 
-      // Load existing votes and reports
-      await Promise.all([loadVotes(), loadReports()]);
+      // Load existing votes, reports, and applied corrections
+      await Promise.all([loadVotes(), loadReports(), loadAppliedCorrections()]);
     })();
 
     // ========== EVENT DELEGATION (attached immediately, not after await) ==========
@@ -528,6 +528,24 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       `;
 
       // Resolve handlers are managed by event delegation on document
+    }
+
+    // ========== APPLIED CORRECTIONS OVERLAY ==========
+    async function loadAppliedCorrections() {
+      try {
+        const res = await fetch(`/api/corrections/surah/${surahNumber}?status=applied`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        for (const c of data.corrections) {
+          const textEl = document.querySelector('#v' + c.verse + ' .verse-review-text');
+          if (textEl && c.correctedText) {
+            textEl.textContent = c.correctedText;
+          }
+        }
+      } catch (e) {
+        console.error('Erreur chargement corrections appliquees:', e);
+      }
     }
 
     // ========== REPORT MODAL ==========
