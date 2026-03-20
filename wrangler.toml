@@ -1,6 +1,6 @@
 name = "tafsirfrench"
 compatibility_date = "2024-12-01"
-main = "./site/dist/_worker.js"
+main = "./site/worker.js"
 
 [assets]
 directory = "./site/dist"
