@@ -1,0 +1,155 @@
+---
+export const prerender = false;
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getSession } from '../../lib/auth.js';
+
+const token = Astro.cookies.get('session')?.value;
+const session = getSession(token);
+if (session) {
+  return Astro.redirect('/admin/');
+}
+---
+
+<BaseLayout title="Connexion">
+  <div class="container" style="max-width: 420px; margin: 4rem auto; padding: 0 1rem;">
+    <div class="auth-card">
+      <h1 style="font-size: 1.4rem; text-align: center; margin-bottom: 0.5rem;">Espace Relecture</h1>
+      <p style="color: var(--color-text-muted); text-align: center; margin-bottom: 2rem; font-size: 0.9rem;">
+        Connectez-vous pour acceder a la gestion du contenu
+      </p>
+
+      <div id="tabs" style="display: flex; gap: 0; margin-bottom: 1.5rem; border-bottom: 2px solid var(--color-border);">
+        <button class="tab active" data-tab="login" style="flex:1; padding: 0.6rem; border: none; background: none; cursor: pointer; font-size: 0.95rem; border-bottom: 2px solid var(--color-primary); margin-bottom: -2px; color: var(--color-primary); font-weight: 600;">
+          Connexion
+        </button>
+        <button class="tab" data-tab="register" style="flex:1; padding: 0.6rem; border: none; background: none; cursor: pointer; font-size: 0.95rem; color: var(--color-text-muted); margin-bottom: -2px;">
+          Inscription
+        </button>
+      </div>
+
+      <div id="error" style="display:none; background: #fef2f2; color: #dc2626; padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem;"></div>
+
+      <!-- Login form -->
+      <form id="login-form">
+        <label style="display:block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Email</label>
+        <input type="email" name="email" required style="width:100%; padding: 0.6rem 0.75rem; border: 1px solid var(--color-border); border-radius: 6px; margin-bottom: 1rem; font-size: 0.95rem; box-sizing: border-box;" />
+
+        <label style="display:block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Mot de passe</label>
+        <input type="password" name="password" required minlength="6" style="width:100%; padding: 0.6rem 0.75rem; border: 1px solid var(--color-border); border-radius: 6px; margin-bottom: 1.5rem; font-size: 0.95rem; box-sizing: border-box;" />
+
+        <button type="submit" style="width:100%; padding: 0.7rem; background: var(--color-primary, #2563eb); color: white; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; font-weight: 600;">
+          Se connecter
+        </button>
+      </form>
+
+      <!-- Register form -->
+      <form id="register-form" style="display:none;">
+        <label style="display:block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Nom</label>
+        <input type="text" name="name" required style="width:100%; padding: 0.6rem 0.75rem; border: 1px solid var(--color-border); border-radius: 6px; margin-bottom: 1rem; font-size: 0.95rem; box-sizing: border-box;" />
+
+        <label style="display:block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Email</label>
+        <input type="email" name="email" required style="width:100%; padding: 0.6rem 0.75rem; border: 1px solid var(--color-border); border-radius: 6px; margin-bottom: 1rem; font-size: 0.95rem; box-sizing: border-box;" />
+
+        <label style="display:block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Mot de passe</label>
+        <input type="password" name="password" required minlength="6" style="width:100%; padding: 0.6rem 0.75rem; border: 1px solid var(--color-border); border-radius: 6px; margin-bottom: 1.5rem; font-size: 0.95rem; box-sizing: border-box;" />
+
+        <button type="submit" style="width:100%; padding: 0.7rem; background: var(--color-primary, #2563eb); color: white; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; font-weight: 600;">
+          Creer mon compte
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const tabs = document.querySelectorAll('.tab');
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    const errorDiv = document.getElementById('error');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        tabs.forEach(t => {
+          t.classList.remove('active');
+          t.style.borderBottom = 'none';
+          t.style.color = 'var(--color-text-muted)';
+          t.style.fontWeight = 'normal';
+        });
+        tab.classList.add('active');
+        tab.style.borderBottom = '2px solid var(--color-primary)';
+        tab.style.color = 'var(--color-primary)';
+        tab.style.fontWeight = '600';
+        loginForm.style.display = target === 'login' ? 'block' : 'none';
+        registerForm.style.display = target === 'register' ? 'block' : 'none';
+        errorDiv.style.display = 'none';
+      });
+    });
+
+    function showError(msg) {
+      errorDiv.textContent = msg;
+      errorDiv.style.display = 'block';
+    }
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorDiv.style.display = 'none';
+      const data = Object.fromEntries(new FormData(loginForm));
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const json = await res.json();
+        if (!res.ok) return showError(json.error);
+        window.location.href = '/admin/';
+      } catch {
+        showError('Erreur de connexion au serveur.');
+      }
+    });
+
+    registerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorDiv.style.display = 'none';
+      const data = Object.fromEntries(new FormData(registerForm));
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const json = await res.json();
+        if (!res.ok) return showError(json.error);
+        // Auto-login after register
+        const loginRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: data.email, password: data.password }),
+        });
+        if (loginRes.ok) {
+          window.location.href = '/admin/';
+        }
+      } catch {
+        showError('Erreur de connexion au serveur.');
+      }
+    });
+  </script>
+
+  <style>
+    .auth-card {
+      background: var(--color-surface, white);
+      border: 1px solid var(--color-border, #e5e7eb);
+      border-radius: 12px;
+      padding: 2rem;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--color-primary, #2563eb);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+    button[type="submit"]:hover {
+      opacity: 0.9;
+    }
+  </style>
+</BaseLayout>

@@ -1,16 +1,18 @@
 ---
+export const prerender = false;
+
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import { getAllSurahs, getSurahMeta, getSurahTafsir, hasPdf } from '../../../lib/content.js';
+import { getSession } from '../../../lib/auth.js';
 
-export function getStaticPaths() {
-  const surahs = getAllSurahs();
-  return surahs.map(s => ({
-    params: { slug: s.slug },
-    props: { surahNumber: s.number },
-  }));
-}
+const token = Astro.cookies.get('session')?.value;
+const user = getSession(token);
 
-const { surahNumber } = Astro.props;
+const slug = Astro.params.slug;
+const allSurahsList = getAllSurahs();
+const found = allSurahsList.find(s => s.slug === slug);
+if (!found) return Astro.redirect('/admin/');
+const surahNumber = found.number;
 const meta = getSurahMeta(surahNumber);
 const allSurahs = getAllSurahs();
 const surahInfo = allSurahs.find(s => s.number === surahNumber);
