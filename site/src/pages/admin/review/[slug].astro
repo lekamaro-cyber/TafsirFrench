@@ -109,13 +109,36 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       )}
 
       <div class="review-content">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-border);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-border); flex-wrap: wrap; gap: 0.5rem;">
           <h2 style="font-size: 1.1rem;">
             Tafsir JSON ({verses.length} versets)
           </h2>
-          <div style="font-size: 0.85rem; color: var(--color-text-muted);">
-            5 votes requis par verset
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <div class="tts-controls">
+              <button id="tts-play-all" class="tts-btn tts-btn-main" title="Lire tous les versets">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                Tout ecouter
+              </button>
+              <div class="tts-speed-control">
+                <label for="tts-speed" style="font-size: 0.75rem; color: var(--color-text-muted);">Vitesse</label>
+                <select id="tts-speed" class="tts-speed-select">
+                  <option value="0.7">0.7x</option>
+                  <option value="0.85">0.85x</option>
+                  <option value="1" selected>1x</option>
+                  <option value="1.15">1.15x</option>
+                  <option value="1.3">1.3x</option>
+                  <option value="1.5">1.5x</option>
+                </select>
+              </div>
+            </div>
+            <div style="font-size: 0.85rem; color: var(--color-text-muted);">
+              5 votes requis
+            </div>
           </div>
+        </div>
+
+        <div id="tts-unavailable" style="display: none; padding: 0.75rem 1rem; background: #fef3c7; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem; color: #92400e;">
+          La synthese vocale n'est pas disponible sur votre navigateur.
         </div>
 
         {verses.length === 0 ? (
@@ -129,6 +152,15 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
                   <span class="verse-vote-badge" id={`badge-${verse.number}`}></span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <button
+                    class="tts-verse-btn"
+                    id={`tts-btn-${verse.number}`}
+                    data-verse={verse.number}
+                    title="Ecouter ce verset"
+                  >
+                    <svg class="tts-icon-play" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    <svg class="tts-icon-stop" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                  </button>
                   <span class="vote-count" id={`count-${verse.number}`}></span>
                   <button
                     class="vote-btn"
@@ -321,6 +353,213 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       toast.className = `toast show ${type}`;
       setTimeout(() => toast.className = 'toast', 3000);
     }
+
+    // ========== TEXT-TO-SPEECH ==========
+    const synth = window.speechSynthesis;
+    let ttsPlaying = false;
+    let ttsCurrentVerse = null;
+    let ttsPlayAllMode = false;
+    let ttsPlayAllIndex = 0;
+    let frenchVoice = null;
+
+    // Check TTS support
+    if (!synth) {
+      document.getElementById('tts-unavailable').style.display = 'block';
+    }
+
+    // Find the best French voice
+    function loadVoices() {
+      const voices = synth.getVoices();
+      // Prefer a natural/enhanced French voice
+      frenchVoice = voices.find(v => v.lang.startsWith('fr') && v.name.toLowerCase().includes('natural'))
+        || voices.find(v => v.lang.startsWith('fr') && v.name.toLowerCase().includes('enhanced'))
+        || voices.find(v => v.lang.startsWith('fr') && !v.localService)
+        || voices.find(v => v.lang.startsWith('fr'))
+        || null;
+    }
+    loadVoices();
+    if (synth.onvoiceschanged !== undefined) {
+      synth.onvoiceschanged = loadVoices;
+    }
+
+    function getSpeed() {
+      return parseFloat(document.getElementById('tts-speed').value) || 1;
+    }
+
+    function stopTTS() {
+      synth.cancel();
+      ttsPlaying = false;
+      ttsPlayAllMode = false;
+      resetAllTTSButtons();
+      removeTextHighlight();
+      updatePlayAllBtn(false);
+    }
+
+    function resetAllTTSButtons() {
+      document.querySelectorAll('.tts-verse-btn').forEach(btn => {
+        btn.classList.remove('playing');
+        btn.querySelector('.tts-icon-play').style.display = '';
+        btn.querySelector('.tts-icon-stop').style.display = 'none';
+      });
+    }
+
+    function setVerseBtnPlaying(verseNum, playing) {
+      const btn = document.getElementById(`tts-btn-${verseNum}`);
+      if (!btn) return;
+      if (playing) {
+        btn.classList.add('playing');
+        btn.querySelector('.tts-icon-play').style.display = 'none';
+        btn.querySelector('.tts-icon-stop').style.display = '';
+      } else {
+        btn.classList.remove('playing');
+        btn.querySelector('.tts-icon-play').style.display = '';
+        btn.querySelector('.tts-icon-stop').style.display = 'none';
+      }
+    }
+
+    function updatePlayAllBtn(playing) {
+      const btn = document.getElementById('tts-play-all');
+      if (!btn) return;
+      if (playing) {
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg> Arreter';
+        btn.classList.add('playing');
+      } else {
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Tout ecouter';
+        btn.classList.remove('playing');
+      }
+    }
+
+    function highlightVerse(verseNum) {
+      removeTextHighlight();
+      const el = document.getElementById(`v${verseNum}`);
+      if (el) {
+        el.classList.add('verse-speaking');
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    function removeTextHighlight() {
+      document.querySelectorAll('.verse-speaking').forEach(el => el.classList.remove('verse-speaking'));
+    }
+
+    function speakVerse(verseNum) {
+      const textEl = document.querySelector(`#v${verseNum} .verse-review-text`);
+      if (!textEl) return;
+      const text = textEl.textContent.trim();
+      if (!text) return;
+
+      synth.cancel();
+      resetAllTTSButtons();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'fr-FR';
+      utterance.rate = getSpeed();
+      utterance.pitch = 1;
+      if (frenchVoice) utterance.voice = frenchVoice;
+
+      ttsPlaying = true;
+      ttsCurrentVerse = verseNum;
+      setVerseBtnPlaying(verseNum, true);
+      highlightVerse(verseNum);
+
+      utterance.onend = () => {
+        setVerseBtnPlaying(verseNum, false);
+        removeTextHighlight();
+        ttsPlaying = false;
+        ttsCurrentVerse = null;
+
+        // If in play-all mode, read next verse
+        if (ttsPlayAllMode) {
+          ttsPlayAllIndex++;
+          const allVerseEls = document.querySelectorAll('.verse-review[data-verse]');
+          if (ttsPlayAllIndex < allVerseEls.length) {
+            const nextVerse = parseInt(allVerseEls[ttsPlayAllIndex].dataset.verse);
+            speakVerse(nextVerse);
+          } else {
+            ttsPlayAllMode = false;
+            updatePlayAllBtn(false);
+          }
+        }
+      };
+
+      utterance.onerror = () => {
+        setVerseBtnPlaying(verseNum, false);
+        removeTextHighlight();
+        ttsPlaying = false;
+        ttsCurrentVerse = null;
+        ttsPlayAllMode = false;
+        updatePlayAllBtn(false);
+      };
+
+      // Chrome bug workaround: long texts get cut off
+      // Resume speech periodically to prevent Chrome from stopping
+      let resumeInterval = null;
+      utterance.onstart = () => {
+        resumeInterval = setInterval(() => {
+          if (synth.speaking && !synth.paused) {
+            synth.pause();
+            synth.resume();
+          }
+        }, 10000);
+      };
+      const origOnEnd = utterance.onend;
+      utterance.onend = (e) => {
+        clearInterval(resumeInterval);
+        origOnEnd(e);
+      };
+      const origOnError = utterance.onerror;
+      utterance.onerror = (e) => {
+        clearInterval(resumeInterval);
+        origOnError(e);
+      };
+
+      synth.speak(utterance);
+    }
+
+    // Per-verse play/stop buttons
+    document.querySelectorAll('.tts-verse-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const verseNum = parseInt(btn.dataset.verse);
+        if (ttsPlaying && ttsCurrentVerse === verseNum) {
+          stopTTS();
+        } else {
+          ttsPlayAllMode = false;
+          updatePlayAllBtn(false);
+          speakVerse(verseNum);
+        }
+      });
+    });
+
+    // "Play all" button
+    document.getElementById('tts-play-all')?.addEventListener('click', () => {
+      if (ttsPlayAllMode || ttsPlaying) {
+        stopTTS();
+        return;
+      }
+      const allVerseEls = document.querySelectorAll('.verse-review[data-verse]');
+      if (allVerseEls.length === 0) return;
+      ttsPlayAllMode = true;
+      ttsPlayAllIndex = 0;
+      updatePlayAllBtn(true);
+      const firstVerse = parseInt(allVerseEls[0].dataset.verse);
+      speakVerse(firstVerse);
+    });
+
+    // Speed change: restart current reading at new speed
+    document.getElementById('tts-speed')?.addEventListener('change', () => {
+      if (ttsPlaying && ttsCurrentVerse) {
+        const v = ttsCurrentVerse;
+        const wasPlayAll = ttsPlayAllMode;
+        const wasIndex = ttsPlayAllIndex;
+        synth.cancel();
+        ttsPlayAllMode = wasPlayAll;
+        ttsPlayAllIndex = wasIndex;
+        speakVerse(v);
+      }
+    });
+
+    // Stop TTS when leaving the page
+    window.addEventListener('beforeunload', () => synth.cancel());
   </script>
 </BaseLayout>
 
@@ -465,6 +704,92 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     padding: 0.15rem 0.5rem;
     border-radius: 100px;
     font-weight: 500;
+  }
+
+  /* TTS controls */
+  .tts-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .tts-btn-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.85rem;
+    border: 1px solid var(--color-primary);
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tts-btn-main:hover {
+    background: var(--color-primary);
+    color: white;
+  }
+  .tts-btn-main.playing {
+    background: #dc2626;
+    color: white;
+    border-color: #dc2626;
+  }
+  .tts-speed-control {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+  }
+  .tts-speed-select {
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    background: white;
+    cursor: pointer;
+  }
+
+  /* Per-verse TTS button */
+  .tts-verse-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--color-border);
+    background: white;
+    color: var(--color-text-muted);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .tts-verse-btn:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: var(--color-primary-light);
+  }
+  .tts-verse-btn.playing {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+    animation: tts-pulse 1.5s infinite;
+  }
+  @keyframes tts-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(14, 124, 97, 0.3); }
+    50% { box-shadow: 0 0 0 6px rgba(14, 124, 97, 0); }
+  }
+
+  /* Verse highlight during speech */
+  .verse-review.verse-speaking {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(14, 124, 97, 0.15);
+    background: #f0fdf8;
+  }
+  .verse-review.verse-speaking.verse-validated {
+    border-color: var(--color-primary);
+    background: #ecfdf5;
   }
 
   /* Toast notifications */
