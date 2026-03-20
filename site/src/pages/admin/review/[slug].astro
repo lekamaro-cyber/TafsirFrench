@@ -133,15 +133,24 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 2rem;
+    align-items: start;
   }
   .review-layout:has(.review-pdf:empty),
   .review-layout:not(:has(.review-pdf)) {
     grid-template-columns: 1fr;
   }
 
+  .review-pdf {
+    position: sticky;
+    top: 1rem;
+  }
+
   @media (max-width: 1024px) {
     .review-layout {
       grid-template-columns: 1fr;
+    }
+    .review-pdf {
+      position: static;
     }
   }
 
