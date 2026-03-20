@@ -242,31 +242,42 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
 
       // Load existing votes and reports
       await Promise.all([loadVotes(), loadReports()]);
-
-      // Attach vote handlers
-      document.querySelectorAll('.vote-btn').forEach(btn => {
-        btn.addEventListener('click', handleVote);
-      });
-
-      // Attach report handlers
-      document.querySelectorAll('.report-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const verse = btn.dataset.verse;
-          const form = document.getElementById(`report-form-${verse}`);
-          form.style.display = form.style.display === 'none' ? 'block' : 'none';
-        });
-      });
-      document.querySelectorAll('.report-cancel-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const verse = btn.dataset.verse;
-          document.getElementById(`report-form-${verse}`).style.display = 'none';
-          document.getElementById(`report-note-${verse}`).value = '';
-        });
-      });
-      document.querySelectorAll('.report-submit-btn').forEach(btn => {
-        btn.addEventListener('click', handleSubmitReport);
-      });
     })();
+
+    // ========== EVENT DELEGATION (attached immediately, not after await) ==========
+    document.addEventListener('click', (e) => {
+      // Vote buttons
+      const voteBtn = e.target.closest('.vote-btn');
+      if (voteBtn) { handleVote({ currentTarget: voteBtn }); return; }
+
+      // Report toggle
+      const reportBtn = e.target.closest('.report-btn');
+      if (reportBtn) {
+        const verse = reportBtn.dataset.verse;
+        const form = document.getElementById('report-form-' + verse);
+        if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        return;
+      }
+
+      // Report cancel
+      const cancelBtn = e.target.closest('.report-cancel-btn');
+      if (cancelBtn) {
+        const verse = cancelBtn.dataset.verse;
+        const form = document.getElementById('report-form-' + verse);
+        const note = document.getElementById('report-note-' + verse);
+        if (form) form.style.display = 'none';
+        if (note) note.value = '';
+        return;
+      }
+
+      // Report submit
+      const submitBtn = e.target.closest('.report-submit-btn');
+      if (submitBtn) { handleSubmitReport({ currentTarget: submitBtn }); return; }
+
+      // Report resolve (dynamically rendered)
+      const resolveBtn = e.target.closest('.report-resolve-btn');
+      if (resolveBtn) { handleResolveReport({ currentTarget: resolveBtn }); return; }
+    });
 
     async function loadVotes() {
       try {
@@ -454,10 +465,7 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
         `).join('')}
       `;
 
-      // Attach resolve handlers
-      container.querySelectorAll('.report-resolve-btn').forEach(btn => {
-        btn.addEventListener('click', handleResolveReport);
-      });
+      // Resolve handlers are managed by event delegation on document
     }
 
     async function handleSubmitReport(e) {
