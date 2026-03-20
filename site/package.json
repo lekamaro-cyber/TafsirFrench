@@ -1,0 +1,18 @@
+{
+  "name": "tafsir-french",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Plateforme de publication du Tafsir en francais",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "sync": "node scripts/sync-content.js",
+    "publish-scheduled": "node scripts/publish-scheduled.js"
+  },
+  "dependencies": {
+    "astro": "^4.16.0",
+    "gray-matter": "^4.0.3",
+    "marked": "^14.0.0"
+  }
+}

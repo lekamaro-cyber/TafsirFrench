@@ -1,0 +1,103 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { getAllSurahs, getSurah, parseVerses } from '../../../lib/content.js';
+
+export function getStaticPaths() {
+  const surahs = getAllSurahs();
+  return surahs.map(s => ({ params: { slug: s.slug } }));
+}
+
+const { slug } = Astro.params;
+const surah = getSurah(slug);
+
+if (!surah) {
+  return Astro.redirect('/admin/');
+}
+
+const verses = parseVerses(surah.rawContent);
+const { frontmatter } = surah;
+
+const statusColors = {
+  draft: 'badge-draft',
+  review: 'badge-review',
+  scheduled: 'badge-scheduled',
+  published: 'badge-published',
+};
+const statusLabels = {
+  draft: 'Brouillon',
+  review: 'En relecture',
+  scheduled: 'Planifiee',
+  published: 'Publiee',
+};
+---
+
+<BaseLayout title={`Relecture - ${frontmatter.name_fr}`}>
+  <div class="container">
+    <!-- Breadcrumb -->
+    <div style="padding: 1rem 0; font-size: 0.9rem; color: var(--color-text-muted);">
+      <a href="/admin/">Gestion</a> &raquo; Relecture
+    </div>
+
+    <!-- Surah info panel -->
+    <div style="background: var(--color-bg-alt); border: 1px solid var(--color-border); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <h1 style="font-size: 1.6rem; margin-bottom: 0.25rem;">
+            Sourate {frontmatter.number} - {frontmatter.name_fr}
+          </h1>
+          <div style="font-family: var(--font-arabic); font-size: 1.5rem; direction: rtl; color: var(--color-primary);">
+            {frontmatter.name_ar}
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <span class={`badge ${statusColors[frontmatter.status] || 'badge-draft'}`}>
+            {statusLabels[frontmatter.status] || frontmatter.status}
+          </span>
+          <div style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--color-text-muted);">
+            {frontmatter.verses_count} versets &middot; {frontmatter.revelation_type}
+          </div>
+        </div>
+      </div>
+
+      <!-- Metadata -->
+      <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border); display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.9rem;">
+        <div>
+          <strong>Relecteur :</strong> {frontmatter.reviewer || 'Non assigne'}
+        </div>
+        <div>
+          <strong>Derniere relecture :</strong> {frontmatter.last_reviewed || 'Jamais'}
+        </div>
+        <div>
+          <strong>Publication prevue :</strong> {frontmatter.publish_date || 'Non planifiee'}
+        </div>
+      </div>
+
+      <!-- Instructions -->
+      <div style="margin-top: 1rem; padding: 1rem; background: #fefce8; border-radius: 8px; font-size: 0.9rem;">
+        <strong>Pour modifier le statut :</strong> editez le champ <code>status</code> dans le frontmatter
+        du fichier <code>data/surahs/{slug}.md</code>.
+        Statuts possibles : <code>draft</code>, <code>review</code>, <code>scheduled</code>, <code>published</code>.
+        Pour planifier, ajoutez aussi <code>publish_date: "YYYY-MM-DD"</code>.
+      </div>
+    </div>
+
+    <!-- Verses content -->
+    <h2 style="font-size: 1.3rem; margin-bottom: 1.5rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-border);">
+      Contenu ({verses.length} versets)
+    </h2>
+
+    {verses.map((verse, i) => (
+      <div class="verse-section" style="position: relative;">
+        <div style="position: absolute; right: 0; top: 2rem; font-size: 0.75rem; color: var(--color-text-muted);">
+          #{verse.number}
+        </div>
+        <h2>Verset {verse.number}</h2>
+        <Fragment set:html={verse.html} />
+      </div>
+    ))}
+
+    <div style="text-align: center; padding: 2rem 0;">
+      <a href="/admin/">&larr; Retour a la gestion</a>
+    </div>
+  </div>
+</BaseLayout>

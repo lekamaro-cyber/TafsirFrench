@@ -1,0 +1,39 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { getPublishedSurahs } from '../lib/content.js';
+
+const surahs = getPublishedSurahs();
+---
+
+<BaseLayout title="Accueil">
+  <section class="hero">
+    <div class="container">
+      <h1>Tafsir du Coran en Francais</h1>
+      <p>Exegese et commentaire du Saint Coran</p>
+    </div>
+  </section>
+
+  <div class="container">
+    {surahs.length === 0 ? (
+      <div style="text-align: center; padding: 3rem 0; color: var(--color-text-muted);">
+        <p style="font-size: 1.2rem;">Aucune sourate publiee pour le moment.</p>
+        <p style="margin-top: 0.5rem;">
+          <a href="/admin/">Acceder au panneau de gestion</a> pour gerer le contenu.
+        </p>
+      </div>
+    ) : (
+      <div class="surah-grid">
+        {surahs.map(surah => (
+          <a href={`/surahs/${surah.slug}/`} class="surah-card" style="text-decoration: none; color: inherit;">
+            <span class="number">{surah.frontmatter.number}</span>
+            <h3>{surah.frontmatter.name_fr}</h3>
+            <div class="name-ar">{surah.frontmatter.name_ar}</div>
+            <div class="meta">
+              {surah.frontmatter.verses_count} versets &middot; {surah.frontmatter.revelation_type}
+            </div>
+          </a>
+        ))}
+      </div>
+    )}
+  </div>
+</BaseLayout>

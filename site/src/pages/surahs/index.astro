@@ -1,0 +1,31 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getPublishedSurahs } from '../../lib/content.js';
+
+const surahs = getPublishedSurahs();
+---
+
+<BaseLayout title="Sourates">
+  <div class="container">
+    <section style="padding: 2rem 0;">
+      <h1 style="font-size: 2rem; margin-bottom: 1.5rem;">Sourates disponibles</h1>
+
+      {surahs.length === 0 ? (
+        <p style="color: var(--color-text-muted);">Aucune sourate publiee pour le moment.</p>
+      ) : (
+        <div class="surah-grid">
+          {surahs.map(surah => (
+            <a href={`/surahs/${surah.slug}/`} class="surah-card" style="text-decoration: none; color: inherit;">
+              <span class="number">{surah.frontmatter.number}</span>
+              <h3>{surah.frontmatter.name_fr}</h3>
+              <div class="name-ar">{surah.frontmatter.name_ar}</div>
+              <div class="meta">
+                {surah.frontmatter.verses_count} versets &middot; {surah.frontmatter.revelation_type}
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+    </section>
+  </div>
+</BaseLayout>

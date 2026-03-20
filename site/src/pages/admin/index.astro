@@ -1,0 +1,169 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getSurahsByStatus, getAllSurahs } from '../../lib/content.js';
+
+const groups = getSurahsByStatus();
+const all = getAllSurahs();
+---
+
+<BaseLayout title="Gestion du contenu">
+  <div class="container-wide">
+    <div class="admin-header">
+      <h1>Gestion du contenu</h1>
+      <p style="color: var(--color-text-muted); margin-top: 0.25rem;">
+        Relecture, validation et planification de la publication
+      </p>
+    </div>
+
+    <!-- Stats -->
+    <div class="admin-stats">
+      <div class="stat-card">
+        <div class="count" style="color: var(--color-draft);">{groups.draft.length}</div>
+        <div class="label">Brouillons</div>
+      </div>
+      <div class="stat-card">
+        <div class="count" style="color: var(--color-review);">{groups.review.length}</div>
+        <div class="label">En relecture</div>
+      </div>
+      <div class="stat-card">
+        <div class="count" style="color: var(--color-scheduled);">{groups.scheduled.length}</div>
+        <div class="label">Planifiees</div>
+      </div>
+      <div class="stat-card">
+        <div class="count" style="color: var(--color-published);">{groups.published.length}</div>
+        <div class="label">Publiees</div>
+      </div>
+    </div>
+
+    <!-- En relecture -->
+    {groups.review.length > 0 && (
+      <div class="admin-section">
+        <h2>En attente de relecture</h2>
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>N</th>
+              <th>Sourate</th>
+              <th>Arabe</th>
+              <th>Versets</th>
+              <th>Statut</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.review.map(s => (
+              <tr>
+                <td>{s.frontmatter.number}</td>
+                <td>{s.frontmatter.name_fr}</td>
+                <td style="font-family: var(--font-arabic); direction: rtl;">{s.frontmatter.name_ar}</td>
+                <td>{s.frontmatter.verses_count}</td>
+                <td><span class="badge badge-review">Relecture</span></td>
+                <td><a href={`/admin/review/${s.slug}/`}>Relire</a></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    <!-- Brouillons -->
+    {groups.draft.length > 0 && (
+      <div class="admin-section">
+        <h2>Brouillons</h2>
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>N</th>
+              <th>Sourate</th>
+              <th>Arabe</th>
+              <th>Versets</th>
+              <th>Statut</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.draft.map(s => (
+              <tr>
+                <td>{s.frontmatter.number}</td>
+                <td>{s.frontmatter.name_fr}</td>
+                <td style="font-family: var(--font-arabic); direction: rtl;">{s.frontmatter.name_ar}</td>
+                <td>{s.frontmatter.verses_count}</td>
+                <td><span class="badge badge-draft">Brouillon</span></td>
+                <td><a href={`/admin/review/${s.slug}/`}>Voir</a></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    <!-- Planifiees -->
+    {groups.scheduled.length > 0 && (
+      <div class="admin-section">
+        <h2>Publication planifiee</h2>
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>N</th>
+              <th>Sourate</th>
+              <th>Date de publication</th>
+              <th>Relecteur</th>
+              <th>Statut</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.scheduled.map(s => (
+              <tr>
+                <td>{s.frontmatter.number}</td>
+                <td>{s.frontmatter.name_fr}</td>
+                <td>{s.frontmatter.publish_date || '-'}</td>
+                <td>{s.frontmatter.reviewer || '-'}</td>
+                <td><span class="badge badge-scheduled">Planifiee</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    <!-- Publiees -->
+    {groups.published.length > 0 && (
+      <div class="admin-section">
+        <h2>Publiees</h2>
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>N</th>
+              <th>Sourate</th>
+              <th>Date de publication</th>
+              <th>Lien</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.published.map(s => (
+              <tr>
+                <td>{s.frontmatter.number}</td>
+                <td>{s.frontmatter.name_fr}</td>
+                <td>{s.frontmatter.publish_date || '-'}</td>
+                <td><a href={`/surahs/${s.slug}/`}>Voir sur le site</a></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    <!-- Aucun contenu -->
+    {all.length === 0 && (
+      <div style="text-align: center; padding: 3rem 0; color: var(--color-text-muted);">
+        <p style="font-size: 1.2rem;">Aucun contenu trouve.</p>
+        <p style="margin-top: 0.5rem;">
+          Ajoutez des fichiers Markdown dans le dossier <code>data/surahs/</code>
+        </p>
+        <p style="margin-top: 0.25rem;">
+          Consultez <code>data/README.md</code> pour le format attendu.
+        </p>
+      </div>
+    )}
+  </div>
+</BaseLayout>
