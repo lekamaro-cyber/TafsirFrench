@@ -248,3 +248,117 @@ async function updateGlobalSummary(surahNumber, validatedCount, totalVerses, env
 
   await env.TAFSIR_AUTH.put(summaryKey, JSON.stringify(summary));
 }
+
+// ========== ERROR REPORTS ==========
+
+/**
+ * POST /api/reports/create
+ * Body: { surah: number, verse: number, note: string }
+ * Reports an error on a verse with a note.
+ */
+export async function handleCreateReport(request, env) {
+  const user = await getSession(request, env);
+  if (!user) return jsonResponse({ error: 'Non authentifie.' }, 401);
+
+  const { surah, verse, note } = await request.json();
+  if (!surah || !verse || !note || !note.trim()) {
+    return jsonResponse({ error: 'Sourate, verset et note requis.' }, 400);
+  }
+
+  const key = `report:${surah}:${verse}`;
+  const existing = await env.TAFSIR_AUTH.get(key);
+  const reports = existing ? JSON.parse(existing) : [];
+
+  reports.push({
+    id: crypto.randomUUID(),
+    userId: user.userId,
+    name: user.name,
+    note: note.trim().slice(0, 1000),
+    date: new Date().toISOString(),
+    resolved: false,
+  });
+
+  await env.TAFSIR_AUTH.put(key, JSON.stringify(reports));
+
+  return jsonResponse({
+    ok: true,
+    reports: reports.filter(r => !r.resolved),
+    totalReports: reports.filter(r => !r.resolved).length,
+  });
+}
+
+/**
+ * POST /api/reports/resolve
+ * Body: { surah: number, verse: number, reportId: string }
+ * Marks a report as resolved.
+ */
+export async function handleResolveReport(request, env) {
+  const user = await getSession(request, env);
+  if (!user) return jsonResponse({ error: 'Non authentifie.' }, 401);
+
+  const { surah, verse, reportId } = await request.json();
+  if (!surah || !verse || !reportId) {
+    return jsonResponse({ error: 'Sourate, verset et ID du signalement requis.' }, 400);
+  }
+
+  const key = `report:${surah}:${verse}`;
+  const existing = await env.TAFSIR_AUTH.get(key);
+  if (!existing) return jsonResponse({ error: 'Aucun signalement trouve.' }, 404);
+
+  const reports = JSON.parse(existing);
+  const report = reports.find(r => r.id === reportId);
+  if (!report) return jsonResponse({ error: 'Signalement introuvable.' }, 404);
+
+  report.resolved = true;
+  report.resolvedBy = user.name;
+  report.resolvedDate = new Date().toISOString();
+
+  await env.TAFSIR_AUTH.put(key, JSON.stringify(reports));
+
+  return jsonResponse({
+    ok: true,
+    reports: reports.filter(r => !r.resolved),
+    totalReports: reports.filter(r => !r.resolved).length,
+  });
+}
+
+/**
+ * GET /api/reports/surah/:number
+ * Returns all active (unresolved) error reports for a surah.
+ */
+export async function handleGetSurahReports(request, env) {
+  const user = await getSession(request, env);
+  if (!user) return jsonResponse({ error: 'Non authentifie.' }, 401);
+
+  const url = new URL(request.url);
+  const surahNumber = url.pathname.split('/').pop();
+  const totalVerses = parseInt(url.searchParams.get('total') || '0');
+
+  const verses = {};
+  const fetchPromises = [];
+
+  for (let i = 1; i <= totalVerses; i++) {
+    fetchPromises.push(
+      env.TAFSIR_AUTH.get(`report:${surahNumber}:${i}`).then(data => {
+        if (data) {
+          const reports = JSON.parse(data);
+          const active = reports.filter(r => !r.resolved);
+          if (active.length > 0) {
+            verses[i] = active;
+          }
+        }
+      })
+    );
+  }
+  await Promise.all(fetchPromises);
+
+  const totalReports = Object.values(verses).reduce((sum, arr) => sum + arr.length, 0);
+  const versesWithErrors = Object.keys(verses).length;
+
+  return jsonResponse({
+    surah: parseInt(surahNumber),
+    verses,
+    totalReports,
+    versesWithErrors,
+  });
+}

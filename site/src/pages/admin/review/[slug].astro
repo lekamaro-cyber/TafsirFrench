@@ -79,6 +79,9 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
         <div class="progress-bar-bg">
           <div class="progress-bar-fill" id="progress-bar" style="width: 0%;"></div>
         </div>
+        <div id="error-count-bar" style="display: none; margin-top: 0.5rem; font-size: 0.85rem; color: #dc2626;">
+          <span id="error-count-text"></span>
+        </div>
       </div>
 
       <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border); display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.9rem;">
@@ -163,6 +166,15 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
                   </button>
                   <span class="vote-count" id={`count-${verse.number}`}></span>
                   <button
+                    class="report-btn"
+                    id={`report-btn-${verse.number}`}
+                    data-surah={surahNumber}
+                    data-verse={verse.number}
+                    title="Signaler une erreur"
+                  >
+                    Erreur
+                  </button>
+                  <button
                     class="vote-btn"
                     id={`vote-btn-${verse.number}`}
                     data-surah={surahNumber}
@@ -177,6 +189,21 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
                 {verse.text}
               </div>
               <div class="verse-voters" id={`voters-${verse.number}`}></div>
+              <!-- Report form (hidden by default) -->
+              <div class="report-form" id={`report-form-${verse.number}`} style="display: none;">
+                <textarea
+                  id={`report-note-${verse.number}`}
+                  class="report-textarea"
+                  placeholder="Decrivez l'erreur trouvee (ex: faute de traduction, mot manquant, erreur de sens...)"
+                  rows="2"
+                ></textarea>
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                  <button class="report-cancel-btn" data-verse={verse.number}>Annuler</button>
+                  <button class="report-submit-btn" data-surah={surahNumber} data-verse={verse.number}>Envoyer le signalement</button>
+                </div>
+              </div>
+              <!-- Active reports -->
+              <div class="verse-reports" id={`reports-${verse.number}`}></div>
             </div>
           ))
         )}
@@ -213,12 +240,31 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
         body: JSON.stringify({ surah: surahNumber, totalVerses }),
       });
 
-      // Load existing votes
-      await loadVotes();
+      // Load existing votes and reports
+      await Promise.all([loadVotes(), loadReports()]);
 
       // Attach vote handlers
       document.querySelectorAll('.vote-btn').forEach(btn => {
         btn.addEventListener('click', handleVote);
+      });
+
+      // Attach report handlers
+      document.querySelectorAll('.report-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const verse = btn.dataset.verse;
+          const form = document.getElementById(`report-form-${verse}`);
+          form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        });
+      });
+      document.querySelectorAll('.report-cancel-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const verse = btn.dataset.verse;
+          document.getElementById(`report-form-${verse}`).style.display = 'none';
+          document.getElementById(`report-note-${verse}`).value = '';
+        });
+      });
+      document.querySelectorAll('.report-submit-btn').forEach(btn => {
+        btn.addEventListener('click', handleSubmitReport);
       });
     })();
 
@@ -345,6 +391,137 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       }
 
       btn.disabled = false;
+    }
+
+    // ========== ERROR REPORTS ==========
+    async function loadReports() {
+      try {
+        const res = await fetch(`/api/reports/surah/${surahNumber}?total=${totalVerses}`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Clear all report displays
+        for (let i = 1; i <= totalVerses; i++) {
+          renderReports(i, data.verses[i] || []);
+        }
+
+        // Update error count bar
+        const bar = document.getElementById('error-count-bar');
+        const text = document.getElementById('error-count-text');
+        if (data.totalReports > 0) {
+          bar.style.display = 'block';
+          text.textContent = `${data.totalReports} erreur(s) signalee(s) sur ${data.versesWithErrors} verset(s)`;
+        } else {
+          bar.style.display = 'none';
+        }
+      } catch (e) {
+        console.error('Erreur chargement signalements:', e);
+      }
+    }
+
+    function renderReports(verseNum, reports) {
+      const container = document.getElementById(`reports-${verseNum}`);
+      const reportBtn = document.getElementById(`report-btn-${verseNum}`);
+      const verseEl = document.getElementById(`v${verseNum}`);
+      if (!container) return;
+
+      if (reports.length === 0) {
+        container.innerHTML = '';
+        reportBtn?.classList.remove('has-reports');
+        verseEl?.classList.remove('verse-has-error');
+        return;
+      }
+
+      reportBtn?.classList.add('has-reports');
+      verseEl?.classList.add('verse-has-error');
+
+      container.innerHTML = `
+        <div class="reports-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          ${reports.length} erreur(s) signalee(s)
+        </div>
+        ${reports.map(r => `
+          <div class="report-item" data-report-id="${r.id}">
+            <div class="report-item-header">
+              <span class="report-author">${r.name}</span>
+              <span class="report-date">${new Date(r.date).toLocaleDateString('fr-FR')}</span>
+            </div>
+            <div class="report-note">${r.note}</div>
+            <button class="report-resolve-btn" data-surah="${surahNumber}" data-verse="${verseNum}" data-report-id="${r.id}">
+              Marquer comme resolu
+            </button>
+          </div>
+        `).join('')}
+      `;
+
+      // Attach resolve handlers
+      container.querySelectorAll('.report-resolve-btn').forEach(btn => {
+        btn.addEventListener('click', handleResolveReport);
+      });
+    }
+
+    async function handleSubmitReport(e) {
+      const btn = e.currentTarget;
+      const surah = parseInt(btn.dataset.surah);
+      const verse = parseInt(btn.dataset.verse);
+      const noteEl = document.getElementById(`report-note-${verse}`);
+      const note = noteEl.value.trim();
+
+      if (!note) {
+        showToast('Veuillez decrire l\'erreur.', 'error');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      try {
+        const res = await fetch('/api/reports/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ surah, verse, note }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error, 'error');
+        } else {
+          showToast('Erreur signalee.', 'success');
+          noteEl.value = '';
+          document.getElementById(`report-form-${verse}`).style.display = 'none';
+          await loadReports();
+        }
+      } catch {
+        showToast('Erreur de connexion.', 'error');
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Envoyer le signalement';
+    }
+
+    async function handleResolveReport(e) {
+      const btn = e.currentTarget;
+      const surah = parseInt(btn.dataset.surah);
+      const verse = parseInt(btn.dataset.verse);
+      const reportId = btn.dataset.reportId;
+
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      try {
+        const res = await fetch('/api/reports/resolve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ surah, verse, reportId }),
+        });
+
+        if (res.ok) {
+          showToast('Signalement resolu.', 'success');
+          await loadReports();
+        }
+      } catch {
+        showToast('Erreur de connexion.', 'error');
+      }
     }
 
     function showToast(message, type) {
@@ -800,6 +977,142 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     padding: 0.15rem 0.5rem;
     border-radius: 100px;
     font-weight: 500;
+  }
+
+  /* Report button */
+  .report-btn {
+    padding: 0.35rem 0.7rem;
+    border: 1px solid #fca5a5;
+    background: white;
+    color: #dc2626;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .report-btn:hover {
+    background: #fef2f2;
+    border-color: #dc2626;
+  }
+  .report-btn.has-reports {
+    background: #fef2f2;
+    border-color: #dc2626;
+  }
+
+  /* Report form */
+  .report-form {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+  }
+  .report-textarea {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    resize: vertical;
+    margin-bottom: 0.5rem;
+    box-sizing: border-box;
+  }
+  .report-textarea:focus {
+    outline: none;
+    border-color: #dc2626;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.1);
+  }
+  .report-cancel-btn {
+    padding: 0.3rem 0.65rem;
+    border: 1px solid var(--color-border);
+    background: white;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .report-submit-btn {
+    padding: 0.3rem 0.65rem;
+    border: 1px solid #dc2626;
+    background: #dc2626;
+    color: white;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .report-submit-btn:hover { opacity: 0.9; }
+  .report-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Report items */
+  .verse-reports {
+    margin-top: 0.5rem;
+  }
+  .reports-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #dc2626;
+    margin-bottom: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed #fca5a5;
+  }
+  .report-item {
+    background: #fff5f5;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    padding: 0.6rem 0.75rem;
+    margin-bottom: 0.4rem;
+    font-size: 0.85rem;
+  }
+  .report-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.3rem;
+  }
+  .report-author {
+    font-weight: 600;
+    color: #991b1b;
+    font-size: 0.8rem;
+  }
+  .report-date {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+  .report-note {
+    color: #7f1d1d;
+    line-height: 1.5;
+    margin-bottom: 0.4rem;
+  }
+  .report-resolve-btn {
+    padding: 0.2rem 0.5rem;
+    border: 1px solid #86efac;
+    background: #f0fdf4;
+    color: #065f46;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .report-resolve-btn:hover {
+    background: #d1fae5;
+    border-color: #065f46;
+  }
+
+  /* Verse with errors */
+  .verse-review.verse-has-error {
+    border-color: #fca5a5;
+    border-left: 3px solid #dc2626;
+  }
+  .verse-review.verse-has-error.verse-validated {
+    border-color: #fca5a5;
+    border-left: 3px solid #dc2626;
+    background: #fffbeb;
   }
 
   /* TTS controls */
