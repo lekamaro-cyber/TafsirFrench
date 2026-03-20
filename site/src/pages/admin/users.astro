@@ -25,6 +25,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </ul>
     </div>
 
+    <div id="role-requests-container" style="margin-top: 1.5rem; display: none;">
+      <h2>Demandes de promotion</h2>
+      <div id="role-requests-list"></div>
+    </div>
+
     <div id="users-container" style="margin-top: 1.5rem;">
       <p style="color: var(--color-text-muted);">Chargement...</p>
     </div>
@@ -47,10 +52,80 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           return;
         }
         await loadUsers();
+        await loadRoleRequests();
       } catch {
         window.location.href = '/admin/login/';
       }
     })();
+
+    async function loadRoleRequests() {
+      try {
+        const res = await fetch('/api/role-requests');
+        if (!res.ok) return;
+        const { requests } = await res.json();
+        const pending = requests.filter(r => r.status === 'pending');
+        const container = document.getElementById('role-requests-container');
+        const list = document.getElementById('role-requests-list');
+
+        if (pending.length === 0) {
+          container.style.display = 'none';
+          return;
+        }
+
+        container.style.display = 'block';
+        let html = '<div style="display: flex; flex-direction: column; gap: 0.75rem;">';
+        for (const req of pending) {
+          const date = new Date(req.created).toLocaleDateString('fr-FR');
+          html += `
+            <div class="request-card" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border: 1px solid #fbbf24; border-radius: 8px; background: #fffbeb;">
+              <div>
+                <strong>${escapeHtml(req.name)}</strong>
+                <span style="color: var(--color-text-muted); font-size: 0.85rem;"> (${escapeHtml(req.email)})</span>
+                <span style="font-size: 0.85rem;"> demande le role <strong>Correcteur</strong></span>
+                <span style="font-size: 0.8rem; color: var(--color-text-muted);"> — ${date}</span>
+                ${req.message ? `<div style="font-size: 0.85rem; margin-top: 0.25rem; color: #78716c;"><em>"${escapeHtml(req.message)}"</em></div>` : ''}
+              </div>
+              <div style="display: flex; gap: 0.5rem;">
+                <button class="approve-request-btn" data-id="${req.id}" style="padding: 0.4rem 0.8rem; border: 1px solid #10b981; background: #ecfdf5; color: #065f46; border-radius: 6px; font-size: 0.85rem; cursor: pointer;">Approuver</button>
+                <button class="deny-request-btn" data-id="${req.id}" style="padding: 0.4rem 0.8rem; border: 1px solid #f87171; background: #fef2f2; color: #dc2626; border-radius: 6px; font-size: 0.85rem; cursor: pointer;">Refuser</button>
+              </div>
+            </div>`;
+        }
+        html += '</div>';
+        list.innerHTML = html;
+
+        list.querySelectorAll('.approve-request-btn').forEach(btn => {
+          btn.addEventListener('click', () => resolveRequest(btn.dataset.id, 'approve'));
+        });
+        list.querySelectorAll('.deny-request-btn').forEach(btn => {
+          btn.addEventListener('click', () => resolveRequest(btn.dataset.id, 'deny'));
+        });
+      } catch (e) {
+        console.error('Erreur chargement demandes:', e);
+      }
+    }
+
+    async function resolveRequest(id, action) {
+      const label = action === 'approve' ? 'approuver' : 'refuser';
+      if (!confirm(`Voulez-vous ${label} cette demande ?`)) return;
+      try {
+        const res = await fetch('/api/role-requests/resolve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, action }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error, 'error');
+        } else {
+          showToast(action === 'approve' ? 'Demande approuvee. L\'utilisateur est maintenant correcteur.' : 'Demande refusee.', 'success');
+          await loadRoleRequests();
+          await loadUsers();
+        }
+      } catch {
+        showToast('Erreur de connexion.', 'error');
+      }
+    }
 
     async function loadUsers() {
       const res = await fetch('/api/users');

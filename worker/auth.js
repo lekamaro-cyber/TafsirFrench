@@ -304,6 +304,120 @@ export async function handleResetPassword(request, env) {
   return jsonResponse({ ok: true, message: `Mot de passe reinitialise pour ${email}.` });
 }
 
+// ========== ROLE REQUESTS ==========
+
+/**
+ * POST /api/role-requests
+ * Body: { message?: string }
+ * A relecteur requests promotion to correcteur.
+ */
+export async function handleCreateRoleRequest(request, env) {
+  const session = await getSessionWithRole(request, env);
+  if (!session) return jsonResponse({ error: 'Non authentifie.' }, 401);
+
+  if (session.role !== 'relecteur') {
+    return jsonResponse({ error: 'Seuls les relecteurs peuvent demander une promotion.' }, 400);
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const requestsData = await env.TAFSIR_AUTH.get('role_requests');
+  const requests = requestsData ? JSON.parse(requestsData) : [];
+
+  // Check for existing pending request
+  const existing = requests.find(r => r.email === session.email && r.status === 'pending');
+  if (existing) {
+    return jsonResponse({ error: 'Vous avez deja une demande en attente.' }, 409);
+  }
+
+  requests.push({
+    id: generateId(),
+    email: session.email,
+    name: session.name,
+    requestedRole: 'correcteur',
+    message: (body.message || '').slice(0, 500),
+    status: 'pending',
+    created: new Date().toISOString(),
+  });
+
+  await env.TAFSIR_AUTH.put('role_requests', JSON.stringify(requests));
+  return jsonResponse({ ok: true, message: 'Demande envoyee.' }, 201);
+}
+
+/**
+ * GET /api/role-requests/mine
+ * Check if the current user has a pending role request.
+ */
+export async function handleMyRoleRequest(request, env) {
+  const session = await getSessionWithRole(request, env);
+  if (!session) return jsonResponse({ error: 'Non authentifie.' }, 401);
+
+  const data = await env.TAFSIR_AUTH.get('role_requests');
+  const requests = data ? JSON.parse(data) : [];
+  const mine = requests.find(r => r.email === session.email && r.status === 'pending');
+  return jsonResponse({ pending: !!mine });
+}
+
+/**
+ * GET /api/role-requests
+ * List all role requests (admin only).
+ */
+export async function handleListRoleRequests(request, env) {
+  const { error, session } = await requireRole(request, env, 'admin');
+  if (error) return error;
+
+  const data = await env.TAFSIR_AUTH.get('role_requests');
+  const requests = data ? JSON.parse(data) : [];
+  return jsonResponse({ requests });
+}
+
+/**
+ * POST /api/role-requests/resolve
+ * Body: { id: string, action: 'approve' | 'deny' }
+ * Admin approves or denies a role request.
+ */
+export async function handleResolveRoleRequest(request, env) {
+  const { error, session } = await requireRole(request, env, 'admin');
+  if (error) return error;
+
+  const { id, action } = await request.json();
+  if (!id || !['approve', 'deny'].includes(action)) {
+    return jsonResponse({ error: 'ID et action (approve/deny) requis.' }, 400);
+  }
+
+  const data = await env.TAFSIR_AUTH.get('role_requests');
+  const requests = data ? JSON.parse(data) : [];
+  const req = requests.find(r => r.id === id);
+  if (!req) return jsonResponse({ error: 'Demande introuvable.' }, 404);
+  if (req.status !== 'pending') return jsonResponse({ error: 'Cette demande a deja ete traitee.' }, 400);
+
+  req.status = action === 'approve' ? 'approved' : 'denied';
+  req.resolvedBy = session.email;
+  req.resolvedAt = new Date().toISOString();
+
+  if (action === 'approve') {
+    // Update user role to correcteur
+    const key = `user:${req.email}`;
+    const userData = await env.TAFSIR_AUTH.get(key);
+    if (userData) {
+      const user = JSON.parse(userData);
+      user.role = req.requestedRole;
+      await env.TAFSIR_AUTH.put(key, JSON.stringify(user));
+
+      // Update users_list
+      const listData = await env.TAFSIR_AUTH.get('users_list');
+      const list = listData ? JSON.parse(listData) : [];
+      const idx = list.findIndex(u => u.email === req.email);
+      if (idx >= 0) {
+        list[idx].role = req.requestedRole;
+        await env.TAFSIR_AUTH.put('users_list', JSON.stringify(list));
+      }
+    }
+  }
+
+  await env.TAFSIR_AUTH.put('role_requests', JSON.stringify(requests));
+  return jsonResponse({ ok: true, status: req.status });
+}
+
 /**
  * POST /api/admin/bootstrap
  * Promotes the currently logged-in user to admin ONLY if no admin exists yet.

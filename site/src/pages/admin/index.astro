@@ -69,6 +69,10 @@ const all = getAllSurahs();
         <strong>Telecharger le JSON</strong>
         <span>Exporter le tafsir avec corrections appliquees</span>
       </button>
+      <button id="nav-role-request" class="nav-card" style="display: none; cursor: pointer; background: none; text-align: left; border-color: #10b981;">
+        <strong>Devenir correcteur</strong>
+        <span>Demander la promotion au role correcteur</span>
+      </button>
     </div>
 
     <!-- Instructions -->
@@ -225,6 +229,28 @@ const all = getAllSurahs();
           document.getElementById('nav-users').style.display = 'block';
           document.getElementById('nav-export').style.display = 'flex';
         }
+        if (user.role === 'relecteur') {
+          const roleBtn = document.getElementById('nav-role-request');
+          // Check own pending request status
+          try {
+            const rrRes = await fetch('/api/role-requests/mine');
+            if (rrRes.ok) {
+              const { pending } = await rrRes.json();
+              if (pending) {
+                roleBtn.style.display = 'flex';
+                roleBtn.disabled = true;
+                roleBtn.querySelector('span').textContent = 'Demande en attente de validation...';
+                roleBtn.style.opacity = '0.6';
+              } else {
+                roleBtn.style.display = 'flex';
+              }
+            } else {
+              roleBtn.style.display = 'flex';
+            }
+          } catch {
+            roleBtn.style.display = 'flex';
+          }
+        }
       } catch {
         window.location.href = '/admin/login/';
         return;
@@ -298,6 +324,33 @@ const all = getAllSurahs();
     document.getElementById('logout-btn')?.addEventListener('click', async () => {
       await fetch('/api/auth/logout', { method: 'POST' });
       window.location.href = '/admin/login/';
+    });
+
+    document.getElementById('nav-role-request')?.addEventListener('click', async () => {
+      const btn = document.getElementById('nav-role-request');
+      const message = prompt('Pourquoi souhaitez-vous devenir correcteur ? (optionnel)') || '';
+      btn.disabled = true;
+      btn.querySelector('span').textContent = 'Envoi en cours...';
+      try {
+        const res = await fetch('/api/role-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          btn.querySelector('span').textContent = 'Demande en attente de validation...';
+          btn.style.opacity = '0.6';
+        } else {
+          alert(data.error || 'Erreur.');
+          btn.disabled = false;
+          btn.querySelector('span').textContent = 'Demander la promotion au role correcteur';
+        }
+      } catch {
+        alert('Erreur de connexion.');
+        btn.disabled = false;
+        btn.querySelector('span').textContent = 'Demander la promotion au role correcteur';
+      }
     });
 
     document.getElementById('nav-export')?.addEventListener('click', async () => {

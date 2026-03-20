@@ -1,4 +1,4 @@
-import { handleRegister, handleLogin, handleLogout, handleMe, handleListUsers, handleChangeRole, handleDeleteUser, handleResetPassword, handleBootstrapAdmin } from './auth.js';
+import { handleRegister, handleLogin, handleLogout, handleMe, handleListUsers, handleChangeRole, handleDeleteUser, handleResetPassword, handleBootstrapAdmin, handleCreateRoleRequest, handleMyRoleRequest, handleListRoleRequests, handleResolveRoleRequest } from './auth.js';
 import { handleCastVote, handleRemoveVote, handleGetSurahVotes, handleGetVotesSummary, handleInitSurah, handleCreateReport, handleResolveReport, handleGetSurahReports } from './votes.js';
 import { handleCreateCorrection, handleReviewCorrection, handleApplyCorrection, handleGetSurahCorrections, handleGetPendingCorrections, handleExportJson } from './corrections.js';
 import { handleTTS } from './tts.js';
@@ -34,6 +34,19 @@ export default {
     }
     if (pathname === '/api/users/reset-password' && request.method === 'POST') {
       return handleResetPassword(request, env);
+    }
+    // Role request routes
+    if (pathname === '/api/role-requests' && request.method === 'POST') {
+      return handleCreateRoleRequest(request, env);
+    }
+    if (pathname === '/api/role-requests/mine' && request.method === 'GET') {
+      return handleMyRoleRequest(request, env);
+    }
+    if (pathname === '/api/role-requests' && request.method === 'GET') {
+      return handleListRoleRequests(request, env);
+    }
+    if (pathname === '/api/role-requests/resolve' && request.method === 'POST') {
+      return handleResolveRoleRequest(request, env);
     }
     if (pathname === '/api/admin/export-json' && request.method === 'GET') {
       return handleExportJson(request, env);
