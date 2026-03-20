@@ -275,6 +275,36 @@ export async function handleDeleteUser(request, env) {
 }
 
 /**
+ * POST /api/users/reset-password
+ * Body: { email: string, newPassword: string }
+ * Reset a user's password (admin only).
+ */
+export async function handleResetPassword(request, env) {
+  const { error, session } = await requireRole(request, env, 'admin');
+  if (error) return error;
+
+  const { email, newPassword } = await request.json();
+  if (!email || !newPassword) {
+    return jsonResponse({ error: 'Email et nouveau mot de passe requis.' }, 400);
+  }
+  if (newPassword.length < 6) {
+    return jsonResponse({ error: 'Le mot de passe doit faire au moins 6 caracteres.' }, 400);
+  }
+
+  const key = `user:${email.trim().toLowerCase()}`;
+  const userData = await env.TAFSIR_AUTH.get(key);
+  if (!userData) {
+    return jsonResponse({ error: 'Utilisateur introuvable.' }, 404);
+  }
+
+  const user = JSON.parse(userData);
+  user.password = await createHash(newPassword);
+  await env.TAFSIR_AUTH.put(key, JSON.stringify(user));
+
+  return jsonResponse({ ok: true, message: `Mot de passe reinitialise pour ${email}.` });
+}
+
+/**
  * POST /api/admin/bootstrap
  * Promotes the currently logged-in user to admin ONLY if no admin exists yet.
  * Works even if users_list doesn't exist (pre-role accounts).

@@ -106,6 +106,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
                 <option value="relecteur" ${(user.role || 'relecteur') === 'relecteur' ? 'selected' : ''}>Relecteur</option>
                 <option value="correcteur" ${user.role === 'correcteur' ? 'selected' : ''}>Correcteur</option>
               </select>
+              <button class="reset-pwd-btn" data-email="${escapeHtml(user.email)}" data-name="${escapeHtml(user.name)}" title="Reinitialiser le mot de passe">MDP</button>
               <button class="delete-user-btn" data-email="${escapeHtml(user.email)}" data-name="${escapeHtml(user.name)}" title="Supprimer l'utilisateur">Supprimer</button>
             `}
           </td>
@@ -140,6 +141,36 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           } catch {
             showToast('Erreur de connexion.', 'error');
             e.target.value = oldRole;
+          }
+        });
+      });
+
+      // Reset password listeners
+      container.querySelectorAll('.reset-pwd-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const email = btn.dataset.email;
+          const name = btn.dataset.name;
+          const newPassword = prompt(`Nouveau mot de passe pour "${name}" (${email}) :\n(minimum 6 caracteres)`);
+          if (!newPassword) return;
+          if (newPassword.length < 6) {
+            showToast('Le mot de passe doit faire au moins 6 caracteres.', 'error');
+            return;
+          }
+
+          try {
+            const res = await fetch('/api/users/reset-password', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, newPassword }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              showToast(data.error, 'error');
+            } else {
+              showToast('Mot de passe reinitialise.', 'success');
+            }
+          } catch {
+            showToast('Erreur de connexion.', 'error');
           }
         });
       });
@@ -205,6 +236,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       cursor: pointer;
       background: white;
     }
+    .reset-pwd-btn {
+      padding: 0.3rem 0.6rem;
+      border: 1px solid #93c5fd;
+      background: white;
+      color: #1e40af;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .reset-pwd-btn:hover { background: #eff6ff; }
     .delete-user-btn {
       margin-left: 0.5rem;
       padding: 0.3rem 0.6rem;
