@@ -1,5 +1,6 @@
-import { handleRegister, handleLogin, handleLogout, handleMe } from './auth.js';
+import { handleRegister, handleLogin, handleLogout, handleMe, handleListUsers, handleChangeRole, handleDeleteUser } from './auth.js';
 import { handleCastVote, handleRemoveVote, handleGetSurahVotes, handleGetVotesSummary, handleInitSurah, handleCreateReport, handleResolveReport, handleGetSurahReports } from './votes.js';
+import { handleCreateCorrection, handleReviewCorrection, handleApplyCorrection, handleGetSurahCorrections, handleGetPendingCorrections } from './corrections.js';
 import { handleTTS } from './tts.js';
 
 export default {
@@ -19,6 +20,17 @@ export default {
     }
     if (pathname === '/api/auth/me' && request.method === 'GET') {
       return handleMe(request, env);
+    }
+
+    // User management API routes (admin only)
+    if (pathname === '/api/users' && request.method === 'GET') {
+      return handleListUsers(request, env);
+    }
+    if (pathname === '/api/users/role' && request.method === 'POST') {
+      return handleChangeRole(request, env);
+    }
+    if (pathname === '/api/users' && request.method === 'DELETE') {
+      return handleDeleteUser(request, env);
     }
 
     // Vote API routes
@@ -47,6 +59,23 @@ export default {
     }
     if (pathname.startsWith('/api/reports/surah/') && request.method === 'GET') {
       return handleGetSurahReports(request, env);
+    }
+
+    // Corrections API routes
+    if (pathname === '/api/corrections/create' && request.method === 'POST') {
+      return handleCreateCorrection(request, env);
+    }
+    if (pathname === '/api/corrections/review' && request.method === 'POST') {
+      return handleReviewCorrection(request, env);
+    }
+    if (pathname === '/api/corrections/apply' && request.method === 'POST') {
+      return handleApplyCorrection(request, env);
+    }
+    if (pathname.startsWith('/api/corrections/surah/') && request.method === 'GET') {
+      return handleGetSurahCorrections(request, env);
+    }
+    if (pathname === '/api/corrections/pending' && request.method === 'GET') {
+      return handleGetPendingCorrections(request, env);
     }
 
     // TTS API route

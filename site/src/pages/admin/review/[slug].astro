@@ -166,6 +166,16 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
                   </button>
                   <span class="vote-count" id={`count-${verse.number}`}></span>
                   <button
+                    class="correct-btn"
+                    id={`correct-btn-${verse.number}`}
+                    data-surah={surahNumber}
+                    data-verse={verse.number}
+                    title="Proposer une correction"
+                    style="display: none;"
+                  >
+                    Corriger
+                  </button>
+                  <button
                     class="report-btn"
                     id={`report-btn-${verse.number}`}
                     data-surah={surahNumber}
@@ -228,6 +238,50 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     </div>
   </div>
 
+  <!-- Correction modal -->
+  <div id="correction-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title" style="color: #059669;">Proposer une correction</h3>
+          <span id="correction-modal-verse" class="modal-subtitle"></span>
+        </div>
+        <button id="correction-modal-close" class="modal-close" title="Fermer">&times;</button>
+      </div>
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.8rem; font-weight: 600; color: var(--color-text-muted); text-transform: uppercase;">Texte actuel</label>
+        <div id="correction-modal-original" class="modal-preview" style="margin-top: 0.25rem;"></div>
+      </div>
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.8rem; font-weight: 600; color: var(--color-text-muted); text-transform: uppercase;">Texte corrige</label>
+        <textarea
+          id="correction-modal-text"
+          class="report-textarea"
+          style="margin-top: 0.25rem; border-color: #86efac;"
+          rows="4"
+          placeholder="Collez ou modifiez le texte corrige ici..."
+        ></textarea>
+      </div>
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.8rem; font-weight: 600; color: var(--color-text-muted); text-transform: uppercase;">Motif de la correction</label>
+        <textarea
+          id="correction-modal-reason"
+          class="report-textarea"
+          style="margin-top: 0.25rem;"
+          rows="2"
+          placeholder="Expliquez pourquoi cette correction est necessaire..."
+        ></textarea>
+      </div>
+      <div style="font-size: 0.8rem; color: var(--color-text-muted); margin-bottom: 0.75rem;">
+        Cette correction devra etre approuvee par 2 relecteurs ou administrateurs avant d'etre appliquee.
+      </div>
+      <div class="modal-actions">
+        <button id="correction-modal-cancel" class="report-cancel-btn">Annuler</button>
+        <button id="correction-modal-submit" style="padding: 0.4rem 0.85rem; border: 1px solid #059669; background: #059669; color: white; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Soumettre la correction</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast"></div>
 
   <script define:vars={{ surahNumber, totalVerses: verses.length }}>
@@ -239,6 +293,13 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
         if (!res.ok) throw new Error();
         const data = await res.json();
         currentUser = data.user;
+
+        // Show "Corriger" buttons for correcteurs and admins
+        if (currentUser.role === 'correcteur' || currentUser.role === 'admin') {
+          document.querySelectorAll('.correct-btn').forEach(btn => {
+            btn.style.display = 'inline-flex';
+          });
+        }
       } catch {
         window.location.href = '/admin/login/';
         return;
@@ -265,6 +326,13 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       const reportBtn = e.target.closest('.report-btn');
       if (reportBtn) {
         openReportModal(parseInt(reportBtn.dataset.surah), parseInt(reportBtn.dataset.verse));
+        return;
+      }
+
+      // Correction toggle → open correction modal
+      const correctBtn = e.target.closest('.correct-btn');
+      if (correctBtn) {
+        openCorrectionModal(parseInt(correctBtn.dataset.surah), parseInt(correctBtn.dataset.verse));
         return;
       }
 
@@ -539,6 +607,90 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
 
       btn.disabled = false;
       btn.textContent = 'Envoyer le signalement';
+    });
+
+    // ========== CORRECTION MODAL ==========
+    let correctionModalSurah = null;
+    let correctionModalVerse = null;
+
+    function openCorrectionModal(surah, verse) {
+      correctionModalSurah = surah;
+      correctionModalVerse = verse;
+
+      const modal = document.getElementById('correction-modal');
+      const verseLabel = document.getElementById('correction-modal-verse');
+      const original = document.getElementById('correction-modal-original');
+      const textInput = document.getElementById('correction-modal-text');
+      const reasonInput = document.getElementById('correction-modal-reason');
+
+      verseLabel.textContent = 'Verset ' + verse + ' — Sourate ' + surah;
+
+      const textEl = document.querySelector('#v' + verse + ' .verse-review-text');
+      const currentText = textEl ? textEl.textContent.trim() : '';
+      original.textContent = currentText || '(texte non disponible)';
+      textInput.value = currentText;
+      reasonInput.value = '';
+
+      modal.style.display = 'flex';
+      textInput.focus();
+    }
+
+    function closeCorrectionModal() {
+      document.getElementById('correction-modal').style.display = 'none';
+      correctionModalSurah = null;
+      correctionModalVerse = null;
+    }
+
+    document.getElementById('correction-modal-close').addEventListener('click', closeCorrectionModal);
+    document.getElementById('correction-modal-cancel').addEventListener('click', closeCorrectionModal);
+    document.getElementById('correction-modal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeCorrectionModal();
+    });
+
+    document.getElementById('correction-modal-submit').addEventListener('click', async () => {
+      const correctedText = document.getElementById('correction-modal-text').value.trim();
+      const reason = document.getElementById('correction-modal-reason').value.trim();
+      const originalEl = document.getElementById('correction-modal-original');
+      const originalText = originalEl.textContent;
+
+      if (!correctedText) {
+        showToast('Veuillez saisir le texte corrige.', 'error');
+        return;
+      }
+      if (!reason) {
+        showToast('Veuillez indiquer le motif de la correction.', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('correction-modal-submit');
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      try {
+        const res = await fetch('/api/corrections/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            surah: correctionModalSurah,
+            verse: correctionModalVerse,
+            originalText,
+            correctedText,
+            reason,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error, 'error');
+        } else {
+          showToast('Correction soumise. Elle sera examinee par les relecteurs.', 'success');
+          closeCorrectionModal();
+        }
+      } catch {
+        showToast('Erreur de connexion.', 'error');
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Soumettre la correction';
     });
 
     async function handleResolveReport(e) {
@@ -1022,6 +1174,21 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
   }
 
   /* Report button */
+  .correct-btn {
+    padding: 0.35rem 0.7rem;
+    border: 1px solid #86efac;
+    background: white;
+    color: #059669;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .correct-btn:hover {
+    background: #f0fdf4;
+    border-color: #059669;
+  }
   .report-btn {
     padding: 0.35rem 0.7rem;
     border: 1px solid #fca5a5;

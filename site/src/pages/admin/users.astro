@@ -1,0 +1,235 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Gestion des utilisateurs">
+  <div class="container-wide">
+    <div class="admin-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <h1>Gestion des utilisateurs</h1>
+        <p style="color: var(--color-text-muted); margin-top: 0.25rem;">
+          Attribution des roles et gestion des acces
+        </p>
+      </div>
+      <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <a href="/admin/" style="font-size: 0.9rem;">Retour au tableau de bord</a>
+      </div>
+    </div>
+
+    <div style="margin: 1rem 0; padding: 1rem 1.25rem; background: #eff6ff; border-radius: 8px; font-size: 0.9rem; border: 1px solid #bfdbfe;">
+      <strong>Roles disponibles :</strong>
+      <ul style="margin: 0.5rem 0 0 1.25rem; padding: 0;">
+        <li><strong>Administrateur</strong> — Acces complet : gestion des utilisateurs, approbation et application des corrections</li>
+        <li><strong>Relecteur</strong> — Vote sur les versets, signalement d'erreurs, approbation des corrections proposees</li>
+        <li><strong>Correcteur</strong> — Proposition de corrections de texte (necessite 2 approbations pour etre appliquees)</li>
+      </ul>
+    </div>
+
+    <div id="users-container" style="margin-top: 1.5rem;">
+      <p style="color: var(--color-text-muted);">Chargement...</p>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let currentUser = null;
+
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) throw new Error();
+        const { user } = await res.json();
+        currentUser = user;
+        if (user.role !== 'admin') {
+          document.getElementById('users-container').innerHTML =
+            '<p style="color: #dc2626; font-weight: 600;">Acces refuse. Seuls les administrateurs peuvent gerer les utilisateurs.</p>';
+          return;
+        }
+        await loadUsers();
+      } catch {
+        window.location.href = '/admin/login/';
+      }
+    })();
+
+    async function loadUsers() {
+      const res = await fetch('/api/users');
+      if (!res.ok) {
+        showToast('Erreur de chargement des utilisateurs.', 'error');
+        return;
+      }
+      const { users } = await res.json();
+      renderUsers(users);
+    }
+
+    function renderUsers(users) {
+      const container = document.getElementById('users-container');
+      if (users.length === 0) {
+        container.innerHTML = '<p style="color: var(--color-text-muted);">Aucun utilisateur.</p>';
+        return;
+      }
+
+      const roleLabels = {
+        admin: { label: 'Administrateur', class: 'role-admin' },
+        relecteur: { label: 'Relecteur', class: 'role-relecteur' },
+        correcteur: { label: 'Correcteur', class: 'role-correcteur' },
+      };
+
+      let html = `
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Nom</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Inscrit le</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      for (const user of users) {
+        const role = roleLabels[user.role] || roleLabels.relecteur;
+        const isSelf = user.email === currentUser.email;
+        const created = user.created ? new Date(user.created).toLocaleDateString('fr-FR') : '-';
+
+        html += `<tr>
+          <td>${escapeHtml(user.name)}</td>
+          <td style="font-size: 0.85rem; color: var(--color-text-muted);">${escapeHtml(user.email)}</td>
+          <td><span class="role-badge ${role.class}">${role.label}</span></td>
+          <td style="font-size: 0.85rem;">${created}</td>
+          <td>
+            ${isSelf ? '<span style="color: var(--color-text-muted); font-size: 0.85rem;">Vous</span>' : `
+              <select class="role-select" data-email="${escapeHtml(user.email)}" data-current="${user.role || 'relecteur'}">
+                <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Administrateur</option>
+                <option value="relecteur" ${(user.role || 'relecteur') === 'relecteur' ? 'selected' : ''}>Relecteur</option>
+                <option value="correcteur" ${user.role === 'correcteur' ? 'selected' : ''}>Correcteur</option>
+              </select>
+              <button class="delete-user-btn" data-email="${escapeHtml(user.email)}" data-name="${escapeHtml(user.name)}" title="Supprimer l'utilisateur">Supprimer</button>
+            `}
+          </td>
+        </tr>`;
+      }
+
+      html += '</tbody></table>';
+      container.innerHTML = html;
+
+      // Role change listeners
+      container.querySelectorAll('.role-select').forEach(select => {
+        select.addEventListener('change', async (e) => {
+          const email = e.target.dataset.email;
+          const newRole = e.target.value;
+          const oldRole = e.target.dataset.current;
+
+          try {
+            const res = await fetch('/api/users/role', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, role: newRole }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              showToast(data.error, 'error');
+              e.target.value = oldRole;
+            } else {
+              showToast('Role mis a jour.', 'success');
+              e.target.dataset.current = newRole;
+              await loadUsers();
+            }
+          } catch {
+            showToast('Erreur de connexion.', 'error');
+            e.target.value = oldRole;
+          }
+        });
+      });
+
+      // Delete listeners
+      container.querySelectorAll('.delete-user-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const email = btn.dataset.email;
+          const name = btn.dataset.name;
+          if (!confirm(`Supprimer l'utilisateur "${name}" (${email}) ? Cette action est irreversible.`)) return;
+
+          try {
+            const res = await fetch('/api/users', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              showToast(data.error, 'error');
+            } else {
+              showToast('Utilisateur supprime.', 'success');
+              await loadUsers();
+            }
+          } catch {
+            showToast('Erreur de connexion.', 'error');
+          }
+        });
+      });
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function showToast(msg, type = 'info') {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast toast-' + type;
+      el.style.display = 'block';
+      setTimeout(() => { el.style.display = 'none'; }, 3000);
+    }
+  </script>
+
+  <style>
+    .role-badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 100px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .role-admin { background: #fef3c7; color: #92400e; }
+    .role-relecteur { background: #dbeafe; color: #1e40af; }
+    .role-correcteur { background: #d1fae5; color: #065f46; }
+    .role-select {
+      padding: 0.3rem 0.5rem;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      background: white;
+    }
+    .delete-user-btn {
+      margin-left: 0.5rem;
+      padding: 0.3rem 0.6rem;
+      border: 1px solid #fca5a5;
+      background: white;
+      color: #dc2626;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .delete-user-btn:hover { background: #fef2f2; }
+    .toast {
+      display: none;
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .toast-success { background: #065f46; color: white; }
+    .toast-error { background: #dc2626; color: white; }
+    .toast-info { background: #1e40af; color: white; }
+  </style>
+</BaseLayout>
