@@ -223,63 +223,29 @@ export async function handleGetPendingCorrections(request, env) {
 
 /**
  * GET /api/admin/export-json
- * Download the tafsir JSON with all applied corrections merged in.
+ * Returns all applied corrections so the client can merge them with the original JSON.
  * Admin only.
  */
 export async function handleExportJson(request, env) {
   const { error, session } = await requireRole(request, env, 'admin');
   if (error) return error;
 
-  // Fetch the original JSON from static assets
-  let tafsir;
-  try {
-    // Try env.ASSETS first (Workers assets binding)
-    const assetUrl = new URL('/data/tafsir_fr.json', request.url);
-    let assetRes;
-    if (env.ASSETS && typeof env.ASSETS.fetch === 'function') {
-      assetRes = await env.ASSETS.fetch(new Request(assetUrl.toString()));
-    }
-    if (!assetRes || !assetRes.ok) {
-      // Fallback: direct fetch to same origin
-      assetRes = await fetch(assetUrl.toString());
-    }
-    if (!assetRes.ok) {
-      return jsonResponse({ error: `Impossible de lire le fichier JSON original (status ${assetRes.status}).` }, 500);
-    }
-    tafsir = await assetRes.json();
-  } catch (e) {
-    return jsonResponse({ error: `Erreur lecture JSON: ${e.message}` }, 500);
-  }
-
-  // Fetch all applied corrections
+  // Fetch all applied corrections from KV
   const indexData = await env.TAFSIR_AUTH.get('corrections_index');
   const index = indexData ? JSON.parse(indexData) : { surahs: [] };
 
-  let appliedCount = 0;
+  const appliedCorrections = [];
   for (const surahNum of index.surahs) {
     const data = await env.TAFSIR_AUTH.get(`corrections:${surahNum}`);
     if (!data) continue;
     const corrections = JSON.parse(data);
     const applied = corrections.filter(c => c.status === 'applied');
     for (const c of applied) {
-      const surahKey = String(c.surah);
-      const verseKey = String(c.verse);
-      if (tafsir[surahKey] && tafsir[surahKey][verseKey] !== undefined) {
-        tafsir[surahKey][verseKey] = c.correctedText;
-        appliedCount++;
-      }
+      appliedCorrections.push({ surah: String(c.surah), verse: String(c.verse), text: c.correctedText });
     }
   }
 
-  const json = JSON.stringify(tafsir, null, 2);
-  return new Response(json, {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Content-Disposition': `attachment; filename="tafsir_fr_corrige.json"`,
-      'X-Corrections-Applied': String(appliedCount),
-    },
-  });
+  return jsonResponse({ corrections: appliedCorrections, count: appliedCorrections.length });
 }
 
 /**

@@ -305,23 +305,38 @@ const all = getAllSurahs();
       btn.querySelector('span').textContent = 'Telechargement en cours...';
       btn.disabled = true;
       try {
-        const res = await fetch('/api/admin/export-json');
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
+        // 1. Fetch original JSON from static assets
+        const jsonRes = await fetch('/data/tafsir_fr.json');
+        if (!jsonRes.ok) throw new Error('Impossible de charger le JSON original.');
+        const tafsir = await jsonRes.json();
+
+        // 2. Fetch applied corrections from API
+        const corrRes = await fetch('/api/admin/export-json');
+        if (!corrRes.ok) {
+          const err = await corrRes.json().catch(() => ({}));
           alert(err.error || 'Erreur lors de l\'export.');
           return;
         }
-        const applied = res.headers.get('X-Corrections-Applied') || '0';
-        const blob = await res.blob();
+        const { corrections, count } = await corrRes.json();
+
+        // 3. Merge corrections into tafsir
+        for (const c of corrections) {
+          if (tafsir[c.surah] && tafsir[c.surah][c.verse] !== undefined) {
+            tafsir[c.surah][c.verse] = c.text;
+          }
+        }
+
+        // 4. Download
+        const blob = new Blob([JSON.stringify(tafsir, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = 'tafsir_fr_corrige.json';
         a.click();
         URL.revokeObjectURL(url);
-        btn.querySelector('span').textContent = `Exporte (${applied} correction(s) appliquee(s))`;
-      } catch {
-        alert('Erreur de connexion.');
+        btn.querySelector('span').textContent = `Exporte (${count} correction(s) appliquee(s))`;
+      } catch (e) {
+        alert(e.message || 'Erreur de connexion.');
       } finally {
         btn.disabled = false;
         setTimeout(() => {
