@@ -230,9 +230,152 @@ a:hover { text-decoration: underline; }
   font-size: 0.85rem;
 }
 
+/* Participate section */
+.participate-section {
+  background: var(--color-bg-alt);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  padding: 3rem 0;
+  margin-bottom: 2rem;
+}
+.participate-title {
+  font-size: 1.8rem;
+  text-align: center;
+  color: var(--color-primary);
+  margin-bottom: 0.75rem;
+}
+.participate-intro {
+  text-align: center;
+  color: var(--color-text-muted);
+  max-width: 650px;
+  margin: 0 auto 2.5rem;
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2.5rem;
+}
+.step-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  position: relative;
+}
+.step-card h3 {
+  font-size: 1.05rem;
+  margin-bottom: 0.5rem;
+  color: var(--color-text);
+}
+.step-card p {
+  font-size: 0.92rem;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+.step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Roles */
+.roles-section {
+  margin-bottom: 2rem;
+}
+.roles-title {
+  font-size: 1.2rem;
+  text-align: center;
+  margin-bottom: 1.25rem;
+  color: var(--color-text);
+}
+.roles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.role-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 1.25rem;
+}
+.role-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.role-relecteur { background: #dbeafe; color: #1e40af; }
+.role-correcteur { background: #ede9fe; color: #5b21b6; }
+.role-admin { background: #d1fae5; color: #065f46; }
+.role-info strong {
+  display: block;
+  font-size: 0.95rem;
+  margin-bottom: 0.25rem;
+}
+.role-info p {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+/* CTA */
+.cta-section {
+  text-align: center;
+  padding-top: 1.5rem;
+}
+.cta-section p {
+  font-size: 1.05rem;
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
+}
+.cta-button {
+  display: inline-block;
+  background: var(--color-primary);
+  color: #fff !important;
+  padding: 0.75rem 2rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1rem;
+  text-decoration: none !important;
+  transition: opacity 0.2s;
+}
+.cta-button:hover { opacity: 0.9; }
+
+/* Section titles */
+.section-title {
+  font-size: 1.5rem;
+  padding-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--color-primary);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .hero h1 { font-size: 1.8rem; }
   .surah-grid { grid-template-columns: 1fr; }
   .admin-stats { flex-direction: column; }
+  .steps-grid { grid-template-columns: 1fr; }
+  .roles-grid { grid-template-columns: 1fr; }
+  .participate-title { font-size: 1.4rem; }
 }

@@ -13,6 +13,95 @@ const surahs = getPublishedSurahs();
     </div>
   </section>
 
+  <!-- Section Participer -->
+  <section class="participate-section">
+    <div class="container">
+      <h2 class="participate-title">Comment participer ?</h2>
+      <p class="participate-intro">
+        Ce projet est collaboratif. Chaque contribution compte pour offrir un tafsir
+        de qualite en langue francaise. Voici la demarche pour nous rejoindre et
+        participer a la completion des textes.
+      </p>
+
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-number">1</div>
+          <h3>Creer un compte</h3>
+          <p>
+            Inscrivez-vous sur la plateforme via la page
+            <a href="/admin/login/">connexion</a>. Vous recevrez le role
+            de <strong>Relecteur</strong> par defaut.
+          </p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">2</div>
+          <h3>Relire et valider</h3>
+          <p>
+            Parcourez les sourates en relecture, lisez chaque verset et son tafsir,
+            puis votez pour valider les passages corrects.
+            <strong>5 votes</strong> sont necessaires par verset.
+          </p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">3</div>
+          <h3>Signaler les erreurs</h3>
+          <p>
+            Si vous repérez une erreur de traduction ou de contenu, utilisez le
+            bouton <strong>"Erreur"</strong> pour la signaler. Chaque signalement
+            est examine par l'equipe.
+          </p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">4</div>
+          <h3>Proposer des corrections</h3>
+          <p>
+            Demandez le role de <strong>Correcteur</strong> pour proposer
+            directement des modifications de texte. Chaque correction est
+            validee par 2 relecteurs avant application.
+          </p>
+        </div>
+      </div>
+
+      <!-- Roles -->
+      <div class="roles-section">
+        <h3 class="roles-title">Les roles</h3>
+        <div class="roles-grid">
+          <div class="role-card">
+            <div class="role-icon role-relecteur">R</div>
+            <div class="role-info">
+              <strong>Relecteur</strong>
+              <p>Vote sur les versets, approuve les corrections, signale les erreurs</p>
+            </div>
+          </div>
+          <div class="role-card">
+            <div class="role-icon role-correcteur">C</div>
+            <div class="role-info">
+              <strong>Correcteur</strong>
+              <p>Propose des modifications de texte en plus des droits de relecteur</p>
+            </div>
+          </div>
+          <div class="role-card">
+            <div class="role-icon role-admin">A</div>
+            <div class="role-info">
+              <strong>Administrateur</strong>
+              <p>Applique les corrections, gere les utilisateurs et publie le contenu</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Call to action -->
+      <div class="cta-section">
+        <p>Pret a contribuer a ce projet ?</p>
+        <a href="/admin/login/" class="cta-button">Rejoindre le projet</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sourates publiees -->
   <div class="container">
     {surahs.length === 0 ? (
       <div style="text-align: center; padding: 3rem 0; color: var(--color-text-muted);">
@@ -22,18 +111,21 @@ const surahs = getPublishedSurahs();
         </p>
       </div>
     ) : (
-      <div class="surah-grid">
-        {surahs.map(surah => (
-          <a href={`/surahs/${surah.slug}/`} class="surah-card" style="text-decoration: none; color: inherit;">
-            <span class="number">{surah.number}</span>
-            <h3>{surah.name_fr}</h3>
-            <div class="name-ar">{surah.name_ar}</div>
-            <div class="meta">
-              {surah.verses} versets &middot; {surah.type}
-            </div>
-          </a>
-        ))}
-      </div>
+      <Fragment>
+        <h2 class="section-title">Sourates publiees</h2>
+        <div class="surah-grid">
+          {surahs.map(surah => (
+            <a href={`/surahs/${surah.slug}/`} class="surah-card" style="text-decoration: none; color: inherit;">
+              <span class="number">{surah.number}</span>
+              <h3>{surah.name_fr}</h3>
+              <div class="name-ar">{surah.name_ar}</div>
+              <div class="meta">
+                {surah.verses} versets &middot; {surah.type}
+              </div>
+            </a>
+          ))}
+        </div>
+      </Fragment>
     )}
   </div>
 </BaseLayout>
