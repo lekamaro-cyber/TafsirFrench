@@ -1,4 +1,4 @@
-import { handleRegister, handleLogin, handleLogout, handleMe, handleListUsers, handleChangeRole, handleDeleteUser } from './auth.js';
+import { handleRegister, handleLogin, handleLogout, handleMe, handleListUsers, handleChangeRole, handleDeleteUser, handleBootstrapAdmin } from './auth.js';
 import { handleCastVote, handleRemoveVote, handleGetSurahVotes, handleGetVotesSummary, handleInitSurah, handleCreateReport, handleResolveReport, handleGetSurahReports } from './votes.js';
 import { handleCreateCorrection, handleReviewCorrection, handleApplyCorrection, handleGetSurahCorrections, handleGetPendingCorrections } from './corrections.js';
 import { handleTTS } from './tts.js';
@@ -31,6 +31,9 @@ export default {
     }
     if (pathname === '/api/users' && request.method === 'DELETE') {
       return handleDeleteUser(request, env);
+    }
+    if (pathname === '/api/admin/bootstrap' && request.method === 'POST') {
+      return handleBootstrapAdmin(request, env);
     }
 
     // Vote API routes

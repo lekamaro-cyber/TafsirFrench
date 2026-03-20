@@ -273,3 +273,58 @@ export async function handleDeleteUser(request, env) {
 
   return jsonResponse({ ok: true });
 }
+
+/**
+ * POST /api/admin/bootstrap
+ * Promotes the currently logged-in user to admin if no admin exists.
+ * Also returns the list of all users for diagnostic purposes.
+ */
+export async function handleBootstrapAdmin(request, env) {
+  const session = await getSessionWithRole(request, env);
+  if (!session) return jsonResponse({ error: 'Non authentifie.' }, 401);
+
+  // Get all users
+  const listData = await env.TAFSIR_AUTH.get('users_list');
+  const userList = listData ? JSON.parse(listData) : [];
+
+  // Check if any admin exists
+  const admins = [];
+  for (const u of userList) {
+    const userData = await env.TAFSIR_AUTH.get(`user:${u.email}`);
+    if (userData) {
+      const user = JSON.parse(userData);
+      u.role = user.role || DEFAULT_ROLE;
+      if (u.role === 'admin') admins.push(u.email);
+    }
+  }
+
+  let promoted = false;
+
+  if (admins.length === 0) {
+    // No admin exists → promote current user
+    const key = `user:${session.email}`;
+    const userData = await env.TAFSIR_AUTH.get(key);
+    if (userData) {
+      const user = JSON.parse(userData);
+      user.role = 'admin';
+      await env.TAFSIR_AUTH.put(key, JSON.stringify(user));
+
+      // Update users_list
+      const idx = userList.findIndex(u => u.email === session.email);
+      if (idx >= 0) {
+        userList[idx].role = 'admin';
+        await env.TAFSIR_AUTH.put('users_list', JSON.stringify(userList));
+      }
+      promoted = true;
+    }
+  }
+
+  return jsonResponse({
+    promoted,
+    currentUser: session.email,
+    users: userList.map(u => ({ name: u.name, email: u.email, role: u.role, created: u.created })),
+    message: promoted
+      ? 'Vous etes maintenant administrateur. Reconnectez-vous pour appliquer.'
+      : 'Un administrateur existe deja (' + admins.join(', ') + '). Contactez-le pour changer votre role.',
+  });
+}
