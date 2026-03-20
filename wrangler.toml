@@ -7,4 +7,4 @@ directory = "./site/dist"
 
 [[kv_namespaces]]
 binding = "TAFSIR_AUTH"
-id = "PLACEHOLDER_KV_ID"
+id = "2358aae9ee1a488199050694db689654"
