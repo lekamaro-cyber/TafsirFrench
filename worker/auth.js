@@ -276,12 +276,12 @@ export async function handleDeleteUser(request, env) {
 
 /**
  * POST /api/admin/bootstrap
- * Promotes the currently logged-in user to admin.
+ * Promotes the currently logged-in user to admin ONLY if no admin exists yet.
  * Works even if users_list doesn't exist (pre-role accounts).
- * Also rebuilds users_list from KV by scanning known user keys.
+ * Once an admin exists, this endpoint is permanently locked.
  */
 export async function handleBootstrapAdmin(request, env) {
-  // Get session directly (bypass role check)
+  // Get session directly (bypass role check since no admin may exist yet)
   const cookie = request.headers.get('Cookie') || '';
   const match = cookie.match(/session=([^;]+)/);
   if (!match) return jsonResponse({ error: 'Non authentifie.' }, 401);
@@ -289,7 +289,28 @@ export async function handleBootstrapAdmin(request, env) {
   if (!sessionData) return jsonResponse({ error: 'Session expiree.' }, 401);
   const session = JSON.parse(sessionData);
 
-  // Directly promote the current user in their KV record
+  // Check if bootstrap has already been used (lock flag)
+  const bootstrapDone = await env.TAFSIR_AUTH.get('bootstrap_done');
+  if (bootstrapDone) {
+    return jsonResponse({ error: 'Le bootstrap a deja ete effectue. Contactez un administrateur.' }, 403);
+  }
+
+  // Also scan users_list to check for existing admins
+  const listData = await env.TAFSIR_AUTH.get('users_list');
+  const userList = listData ? JSON.parse(listData) : [];
+  for (const u of userList) {
+    const ud = await env.TAFSIR_AUTH.get(`user:${u.email}`);
+    if (ud) {
+      const parsed = JSON.parse(ud);
+      if (parsed.role === 'admin') {
+        // Lock bootstrap permanently
+        await env.TAFSIR_AUTH.put('bootstrap_done', 'true');
+        return jsonResponse({ error: 'Un administrateur existe deja. Contactez-le pour changer votre role.' }, 403);
+      }
+    }
+  }
+
+  // No admin found → promote current user
   const key = `user:${session.email}`;
   const userData = await env.TAFSIR_AUTH.get(key);
   if (!userData) return jsonResponse({ error: 'Utilisateur introuvable dans KV.' }, 404);
@@ -300,8 +321,6 @@ export async function handleBootstrapAdmin(request, env) {
   await env.TAFSIR_AUTH.put(key, JSON.stringify(user));
 
   // Rebuild users_list: add this user if not present
-  const listData = await env.TAFSIR_AUTH.get('users_list');
-  const userList = listData ? JSON.parse(listData) : [];
   const idx = userList.findIndex(u => u.email === session.email);
   if (idx >= 0) {
     userList[idx].role = 'admin';
@@ -309,6 +328,9 @@ export async function handleBootstrapAdmin(request, env) {
     userList.push({ id: user.id, email: user.email, name: user.name, role: 'admin', created: user.created });
   }
   await env.TAFSIR_AUTH.put('users_list', JSON.stringify(userList));
+
+  // Lock bootstrap permanently so no one else can use it
+  await env.TAFSIR_AUTH.put('bootstrap_done', 'true');
 
   return jsonResponse({
     ok: true,
