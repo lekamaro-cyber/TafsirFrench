@@ -533,14 +533,27 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     // ========== APPLIED CORRECTIONS OVERLAY ==========
     async function loadAppliedCorrections() {
       try {
-        const res = await fetch(`/api/corrections/surah/${surahNumber}?status=applied`);
+        // Fetch ALL corrections for this surah (no status filter)
+        const res = await fetch(`/api/corrections/surah/${surahNumber}`);
         if (!res.ok) return;
         const data = await res.json();
 
+        // Apply text from corrections that are approved or applied
+        // Use the most recent one per verse
+        const correctionsByVerse = {};
         for (const c of data.corrections) {
-          const textEl = document.querySelector('#v' + c.verse + ' .verse-review-text');
+          if (c.status === 'applied' || c.status === 'approved') {
+            correctionsByVerse[c.verse] = c;
+          }
+        }
+
+        for (const [verse, c] of Object.entries(correctionsByVerse)) {
+          const textEl = document.querySelector('#v' + verse + ' .verse-review-text');
           if (textEl && c.correctedText) {
             textEl.textContent = c.correctedText;
+            // Visual indicator that text was corrected
+            textEl.style.borderLeft = '3px solid #059669';
+            textEl.style.paddingLeft = '0.75rem';
           }
         }
       } catch (e) {

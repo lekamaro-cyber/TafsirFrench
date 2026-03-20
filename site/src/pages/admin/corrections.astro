@@ -218,7 +218,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         if (!res.ok) {
           showToast(data.error, 'error');
         } else {
-          showToast(action === 'approve' ? 'Correction approuvee.' : 'Correction rejetee.', 'success');
+          const msg = action === 'approve'
+            ? (data.status === 'applied' ? 'Correction approuvee et appliquee.' : 'Correction approuvee.')
+            : 'Correction rejetee.';
+          showToast(msg, 'success');
           await loadCorrections();
         }
       } catch {
