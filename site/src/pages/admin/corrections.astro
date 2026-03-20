@@ -20,7 +20,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <!-- Workflow explanation -->
     <div style="margin: 1rem 0; padding: 1rem 1.25rem; background: #f0fdf4; border-radius: 8px; font-size: 0.9rem; border: 1px solid #bbf7d0;">
       <strong>Workflow de correction :</strong>
-      Un correcteur propose une modification &rarr; 2 relecteurs/admins doivent approuver &rarr; l'admin applique la correction.
+      Un correcteur propose une modification &rarr; un admin peut approuver seul, sinon 2 relecteurs doivent approuver &rarr; l'admin applique la correction.
       Tout rejet bloque la correction.
     </div>
 
@@ -172,7 +172,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             </div>
 
             <div class="correction-approvals">
-              <span>Approbations : ${(c.approvals || []).length}/2</span>
+              <span>Approbations : ${(c.approvals || []).length}/${data.approvalsRequired || 2}</span>
               ${(c.approvals || []).map(a => `<span class="approval-badge">${escapeHtml(a.name)}</span>`).join('')}
               ${(c.rejections || []).length > 0 ? `<span class="rejection-badge">Rejete par ${c.rejections.map(r => escapeHtml(r.name)).join(', ')}</span>` : ''}
             </div>

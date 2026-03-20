@@ -102,8 +102,8 @@ export async function handleReviewCorrection(request, env) {
 
   if (action === 'approve') {
     correction.approvals.push(review);
-    // Auto-approve if enough approvals
-    if (correction.approvals.length >= APPROVALS_REQUIRED) {
+    // Admin approval is sufficient on its own; otherwise need 2 approvals
+    if (session.role === 'admin' || correction.approvals.length >= APPROVALS_REQUIRED) {
       correction.status = 'approved';
       correction.approvedDate = new Date().toISOString();
     }
