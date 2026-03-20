@@ -192,7 +192,7 @@ export async function handleGetSurahCorrections(request, env) {
 
 /**
  * GET /api/corrections/pending
- * Get all pending corrections across all surahs (for the dashboard).
+ * Get all corrections across all surahs (for the dashboard).
  */
 export async function handleGetPendingCorrections(request, env) {
   const { error, session } = await requireRole(request, env, 'admin', 'relecteur', 'correcteur');
@@ -201,23 +201,22 @@ export async function handleGetPendingCorrections(request, env) {
   const indexData = await env.TAFSIR_AUTH.get('corrections_index');
   const index = indexData ? JSON.parse(indexData) : { pending: 0, approved: 0, surahs: [] };
 
-  // Fetch all pending corrections
-  const allPending = [];
+  // Fetch ALL corrections from all tracked surahs
+  const allCorrections = [];
   for (const surahNum of index.surahs) {
     const data = await env.TAFSIR_AUTH.get(`corrections:${surahNum}`);
     if (data) {
       const corrections = JSON.parse(data);
-      const pending = corrections.filter(c => c.status === 'pending' || c.status === 'approved');
-      allPending.push(...pending);
+      allCorrections.push(...corrections);
     }
   }
 
   // Sort by date descending
-  allPending.sort((a, b) => new Date(b.created) - new Date(a.created));
+  allCorrections.sort((a, b) => new Date(b.created) - new Date(a.created));
 
   return jsonResponse({
-    corrections: allPending,
-    total: allPending.length,
+    corrections: allCorrections,
+    total: allCorrections.length,
     approvalsRequired: APPROVALS_REQUIRED,
   });
 }

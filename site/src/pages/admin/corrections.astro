@@ -89,20 +89,19 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     async function loadCorrections() {
       try {
         const res = await fetch('/api/corrections/pending');
-        if (!res.ok) throw new Error();
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Erreur API');
+        }
         const data = await res.json();
         allCorrections = data.corrections || [];
-
-        // Also load applied and rejected for complete view
-        // We need to fetch per-surah... for now show what we have
-        // The /pending endpoint returns pending + approved
-        // For rejected/applied, we show a message
 
         updateStats();
         renderCorrections();
       } catch (e) {
+        console.error('Erreur chargement corrections:', e);
         document.getElementById('corrections-container').innerHTML =
-          '<p style="color: var(--color-text-muted);">Aucune correction en attente.</p>';
+          `<p style="color: #dc2626;">Erreur: ${e.message || 'Impossible de charger les corrections.'}</p>`;
       }
     }
 
@@ -119,11 +118,20 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       const filtered = allCorrections.filter(c => c.status === currentFilter);
 
       if (filtered.length === 0) {
+        if (allCorrections.length === 0) {
+          container.innerHTML = `
+            <div style="text-align: center; padding: 2rem; color: var(--color-text-muted);">
+              <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">Aucune correction soumise pour le moment.</p>
+              <p style="margin-bottom: 1rem;">Pour proposer une correction, rendez-vous sur une page de relecture et cliquez sur le bouton <strong style="color: #059669;">"Corriger"</strong> a cote d'un verset.</p>
+              <a href="/admin/" style="color: var(--color-primary); font-weight: 600;">Acceder aux sourates en relecture &rarr;</a>
+            </div>`;
+          return;
+        }
         const messages = {
           pending: 'Aucune correction en attente de validation.',
           approved: 'Aucune correction approuvee en attente d\'application.',
-          applied: 'Les corrections appliquees sont archivees au niveau de chaque sourate.',
-          rejected: 'Les corrections rejetees sont archivees au niveau de chaque sourate.',
+          applied: 'Aucune correction appliquee.',
+          rejected: 'Aucune correction rejetee.',
         };
         container.innerHTML = `<p style="color: var(--color-text-muted);">${messages[currentFilter]}</p>`;
         return;
