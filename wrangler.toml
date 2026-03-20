@@ -1,6 +1,9 @@
 name = "tafsirfrench"
 compatibility_date = "2024-12-01"
-pages_build_output_dir = "./site/dist"
+main = "./site/dist/_worker.js"
+
+[assets]
+directory = "./site/dist"
 
 [[kv_namespaces]]
 binding = "TAFSIR_AUTH"
