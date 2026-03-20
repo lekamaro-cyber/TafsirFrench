@@ -1,14 +1,5 @@
 ---
-export const prerender = false;
-
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { getSession } from '../../lib/auth.js';
-
-const token = Astro.cookies.get('session')?.value;
-const session = getSession(token);
-if (session) {
-  return Astro.redirect('/admin/');
-}
 ---
 
 <BaseLayout title="Connexion">
@@ -62,6 +53,9 @@ if (session) {
   </div>
 
   <script>
+    // Redirect if already logged in
+    fetch('/api/auth/me').then(r => { if (r.ok) window.location.href = '/admin/'; }).catch(() => {});
+
     const tabs = document.querySelectorAll('.tab');
     const loginForm = document.getElementById('login-form');
     const registerForm = document.getElementById('register-form');

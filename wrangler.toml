@@ -1,5 +1,10 @@
 name = "tafsirfrench"
 compatibility_date = "2024-12-01"
+main = "worker/index.js"
 
 [assets]
 directory = "./site/dist"
+
+[[kv_namespaces]]
+binding = "TAFSIR_AUTH"
+id = "PLACEHOLDER_KV_ID"

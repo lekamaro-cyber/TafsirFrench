@@ -1,18 +1,16 @@
 ---
-export const prerender = false;
-
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import { getAllSurahs, getSurahMeta, getSurahTafsir, hasPdf } from '../../../lib/content.js';
-import { getSession } from '../../../lib/auth.js';
 
-const token = Astro.cookies.get('session')?.value;
-const user = getSession(token);
+export function getStaticPaths() {
+  const surahs = getAllSurahs();
+  return surahs.map(s => ({
+    params: { slug: s.slug },
+    props: { surahNumber: s.number },
+  }));
+}
 
-const slug = Astro.params.slug;
-const allSurahsList = getAllSurahs();
-const found = allSurahsList.find(s => s.slug === slug);
-if (!found) return Astro.redirect('/admin/');
-const surahNumber = found.number;
+const { surahNumber } = Astro.props;
 const meta = getSurahMeta(surahNumber);
 const allSurahs = getAllSurahs();
 const surahInfo = allSurahs.find(s => s.number === surahNumber);
@@ -128,6 +126,17 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       {nextSurah && <a href={`/admin/review/${nextSurah.slug}/`}>Sourate {nextSurah.number} &rarr;</a>}
     </div>
   </div>
+
+  <script>
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) throw new Error();
+      } catch {
+        window.location.href = '/admin/login/';
+      }
+    })();
+  </script>
 </BaseLayout>
 
 <style>

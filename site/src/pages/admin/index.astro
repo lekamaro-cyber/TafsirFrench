@@ -1,12 +1,6 @@
 ---
-export const prerender = false;
-
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getSurahsByStatus, getAllSurahs } from '../../lib/content.js';
-import { getSession } from '../../lib/auth.js';
-
-const token = Astro.cookies.get('session')?.value;
-const user = getSession(token);
 
 const groups = getSurahsByStatus();
 const all = getAllSurahs();
@@ -21,8 +15,8 @@ const all = getAllSurahs();
         Relecture, validation et planification de la publication &mdash; {all.length} sourates, 6236 versets
         </p>
       </div>
-      <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem;">
-        <span style="color: var(--color-text-muted);">{user?.name}</span>
+      <div id="user-bar" style="display: none; align-items: center; gap: 0.75rem; font-size: 0.9rem;">
+        <span id="user-name" style="color: var(--color-text-muted);"></span>
         <button id="logout-btn" style="padding: 0.4rem 0.8rem; border: 1px solid var(--color-border); border-radius: 6px; background: none; cursor: pointer; font-size: 0.85rem;">
           Deconnexion
         </button>
@@ -179,9 +173,20 @@ const all = getAllSurahs();
   </div>
 
   <script>
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) throw new Error();
+        const { user } = await res.json();
+        document.getElementById('user-name').textContent = user.name;
+        document.getElementById('user-bar').style.display = 'flex';
+      } catch {
+        window.location.href = '/admin/login/';
+      }
+    })();
     document.getElementById('logout-btn')?.addEventListener('click', async () => {
       await fetch('/api/auth/logout', { method: 'POST' });
-      window.location.href = '/admin/login';
+      window.location.href = '/admin/login/';
     });
   </script>
 </BaseLayout>
