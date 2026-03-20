@@ -189,19 +189,6 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
                 {verse.text}
               </div>
               <div class="verse-voters" id={`voters-${verse.number}`}></div>
-              <!-- Report form (hidden by default) -->
-              <div class="report-form" id={`report-form-${verse.number}`} style="display: none;">
-                <textarea
-                  id={`report-note-${verse.number}`}
-                  class="report-textarea"
-                  placeholder="Decrivez l'erreur trouvee (ex: faute de traduction, mot manquant, erreur de sens...)"
-                  rows="2"
-                ></textarea>
-                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-                  <button class="report-cancel-btn" data-verse={verse.number}>Annuler</button>
-                  <button class="report-submit-btn" data-surah={surahNumber} data-verse={verse.number}>Envoyer le signalement</button>
-                </div>
-              </div>
               <!-- Active reports -->
               <div class="verse-reports" id={`reports-${verse.number}`}></div>
             </div>
@@ -214,6 +201,30 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       {prevSurah && <a href={`/admin/review/${prevSurah.slug}/`}>&larr; Sourate {prevSurah.number}</a>}
       <a href="/admin/">Retour a la gestion</a>
       {nextSurah && <a href={`/admin/review/${nextSurah.slug}/`}>Sourate {nextSurah.number} &rarr;</a>}
+    </div>
+  </div>
+
+  <!-- Report modal -->
+  <div id="report-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title">Signaler une erreur</h3>
+          <span id="report-modal-verse" class="modal-subtitle"></span>
+        </div>
+        <button id="report-modal-close" class="modal-close" title="Fermer">&times;</button>
+      </div>
+      <div id="report-modal-preview" class="modal-preview"></div>
+      <textarea
+        id="report-modal-note"
+        class="report-textarea"
+        placeholder="Decrivez l'erreur trouvee (ex: faute de traduction, mot manquant, erreur de sens...)"
+        rows="3"
+      ></textarea>
+      <div class="modal-actions">
+        <button id="report-modal-cancel" class="report-cancel-btn">Annuler</button>
+        <button id="report-modal-submit" class="report-submit-btn">Envoyer le signalement</button>
+      </div>
     </div>
   </div>
 
@@ -250,29 +261,12 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       const voteBtn = e.target.closest('.vote-btn');
       if (voteBtn) { handleVote({ currentTarget: voteBtn }); return; }
 
-      // Report toggle
+      // Report toggle → open modal
       const reportBtn = e.target.closest('.report-btn');
       if (reportBtn) {
-        const verse = reportBtn.dataset.verse;
-        const form = document.getElementById('report-form-' + verse);
-        if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        openReportModal(parseInt(reportBtn.dataset.surah), parseInt(reportBtn.dataset.verse));
         return;
       }
-
-      // Report cancel
-      const cancelBtn = e.target.closest('.report-cancel-btn');
-      if (cancelBtn) {
-        const verse = cancelBtn.dataset.verse;
-        const form = document.getElementById('report-form-' + verse);
-        const note = document.getElementById('report-note-' + verse);
-        if (form) form.style.display = 'none';
-        if (note) note.value = '';
-        return;
-      }
-
-      // Report submit
-      const submitBtn = e.target.closest('.report-submit-btn');
-      if (submitBtn) { handleSubmitReport({ currentTarget: submitBtn }); return; }
 
       // Report resolve (dynamically rendered)
       const resolveBtn = e.target.closest('.report-resolve-btn');
@@ -468,18 +462,59 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       // Resolve handlers are managed by event delegation on document
     }
 
-    async function handleSubmitReport(e) {
-      const btn = e.currentTarget;
-      const surah = parseInt(btn.dataset.surah);
-      const verse = parseInt(btn.dataset.verse);
-      const noteEl = document.getElementById(`report-note-${verse}`);
-      const note = noteEl.value.trim();
+    // ========== REPORT MODAL ==========
+    let reportModalSurah = null;
+    let reportModalVerse = null;
 
+    function openReportModal(surah, verse) {
+      reportModalSurah = surah;
+      reportModalVerse = verse;
+
+      const modal = document.getElementById('report-modal');
+      const verseLabel = document.getElementById('report-modal-verse');
+      const preview = document.getElementById('report-modal-preview');
+      const note = document.getElementById('report-modal-note');
+
+      verseLabel.textContent = 'Verset ' + verse + ' — Sourate ' + surah;
+
+      // Show a truncated preview of the verse text
+      const textEl = document.querySelector('#v' + verse + ' .verse-review-text');
+      if (textEl) {
+        const text = textEl.textContent.trim();
+        preview.textContent = text.length > 200 ? text.slice(0, 200) + '...' : text;
+        preview.style.display = 'block';
+      } else {
+        preview.style.display = 'none';
+      }
+
+      note.value = '';
+      modal.style.display = 'flex';
+      note.focus();
+    }
+
+    function closeReportModal() {
+      document.getElementById('report-modal').style.display = 'none';
+      reportModalSurah = null;
+      reportModalVerse = null;
+    }
+
+    document.getElementById('report-modal-close').addEventListener('click', closeReportModal);
+    document.getElementById('report-modal-cancel').addEventListener('click', closeReportModal);
+    document.getElementById('report-modal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeReportModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeReportModal();
+    });
+
+    document.getElementById('report-modal-submit').addEventListener('click', async () => {
+      const note = document.getElementById('report-modal-note').value.trim();
       if (!note) {
         showToast('Veuillez decrire l\'erreur.', 'error');
         return;
       }
 
+      const btn = document.getElementById('report-modal-submit');
       btn.disabled = true;
       btn.textContent = '...';
 
@@ -487,7 +522,7 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
         const res = await fetch('/api/reports/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ surah, verse, note }),
+          body: JSON.stringify({ surah: reportModalSurah, verse: reportModalVerse, note }),
         });
 
         const data = await res.json();
@@ -495,8 +530,7 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
           showToast(data.error, 'error');
         } else {
           showToast('Erreur signalee.', 'success');
-          noteEl.value = '';
-          document.getElementById(`report-form-${verse}`).style.display = 'none';
+          closeReportModal();
           await loadReports();
         }
       } catch {
@@ -505,7 +539,7 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
 
       btn.disabled = false;
       btn.textContent = 'Envoyer le signalement';
-    }
+    });
 
     async function handleResolveReport(e) {
       const btn = e.currentTarget;
@@ -1008,23 +1042,87 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     border-color: #dc2626;
   }
 
-  /* Report form */
-  .report-form {
-    margin-top: 0.75rem;
-    padding: 0.75rem;
-    background: #fef2f2;
-    border: 1px solid #fecaca;
+  /* Report modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    padding: 1rem;
+    animation: modal-fade-in 0.15s ease;
+  }
+  @keyframes modal-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 520px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    animation: modal-slide-in 0.2s ease;
+  }
+  @keyframes modal-slide-in {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+  }
+  .modal-title {
+    font-size: 1.1rem;
+    color: #dc2626;
+    margin-bottom: 0.2rem;
+  }
+  .modal-subtitle {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    font-weight: 500;
+  }
+  .modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 0 0.25rem;
+    line-height: 1;
+  }
+  .modal-close:hover { color: var(--color-text); }
+  .modal-preview {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
     border-radius: 6px;
+    padding: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    line-height: 1.6;
+    margin-bottom: 1rem;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    margin-top: 0.75rem;
   }
   .report-textarea {
     width: 100%;
-    padding: 0.5rem 0.75rem;
+    padding: 0.6rem 0.75rem;
     border: 1px solid #fca5a5;
     border-radius: 6px;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     font-family: inherit;
     resize: vertical;
-    margin-bottom: 0.5rem;
     box-sizing: border-box;
   }
   .report-textarea:focus {
@@ -1033,20 +1131,21 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.1);
   }
   .report-cancel-btn {
-    padding: 0.3rem 0.65rem;
+    padding: 0.4rem 0.85rem;
     border: 1px solid var(--color-border);
     background: white;
     border-radius: 6px;
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     cursor: pointer;
   }
+  .report-cancel-btn:hover { background: var(--color-bg); }
   .report-submit-btn {
-    padding: 0.3rem 0.65rem;
+    padding: 0.4rem 0.85rem;
     border: 1px solid #dc2626;
     background: #dc2626;
     color: white;
     border-radius: 6px;
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     font-weight: 600;
     cursor: pointer;
     transition: opacity 0.2s;
