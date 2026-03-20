@@ -65,6 +65,10 @@ const all = getAllSurahs();
         <strong>Utilisateurs</strong>
         <span>Gerer les roles et les acces</span>
       </a>
+      <button id="nav-export" class="nav-card" style="display: none; cursor: pointer; background: none; text-align: left;">
+        <strong>Telecharger le JSON</strong>
+        <span>Exporter le tafsir avec corrections appliquees</span>
+      </button>
     </div>
 
     <!-- Instructions -->
@@ -219,6 +223,7 @@ const all = getAllSurahs();
         document.getElementById('admin-nav').style.display = 'flex';
         if (user.role === 'admin') {
           document.getElementById('nav-users').style.display = 'block';
+          document.getElementById('nav-export').style.display = 'flex';
         }
       } catch {
         window.location.href = '/admin/login/';
@@ -293,6 +298,36 @@ const all = getAllSurahs();
     document.getElementById('logout-btn')?.addEventListener('click', async () => {
       await fetch('/api/auth/logout', { method: 'POST' });
       window.location.href = '/admin/login/';
+    });
+
+    document.getElementById('nav-export')?.addEventListener('click', async () => {
+      const btn = document.getElementById('nav-export');
+      btn.querySelector('span').textContent = 'Telechargement en cours...';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/admin/export-json');
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(err.error || 'Erreur lors de l\'export.');
+          return;
+        }
+        const applied = res.headers.get('X-Corrections-Applied') || '0';
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'tafsir_fr_corrige.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        btn.querySelector('span').textContent = `Exporte (${applied} correction(s) appliquee(s))`;
+      } catch {
+        alert('Erreur de connexion.');
+      } finally {
+        btn.disabled = false;
+        setTimeout(() => {
+          btn.querySelector('span').textContent = 'Exporter le tafsir avec corrections appliquees';
+        }, 3000);
+      }
     });
   </script>
 

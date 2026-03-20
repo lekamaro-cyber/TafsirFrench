@@ -1,6 +1,6 @@
 import { handleRegister, handleLogin, handleLogout, handleMe, handleListUsers, handleChangeRole, handleDeleteUser, handleResetPassword, handleBootstrapAdmin } from './auth.js';
 import { handleCastVote, handleRemoveVote, handleGetSurahVotes, handleGetVotesSummary, handleInitSurah, handleCreateReport, handleResolveReport, handleGetSurahReports } from './votes.js';
-import { handleCreateCorrection, handleReviewCorrection, handleApplyCorrection, handleGetSurahCorrections, handleGetPendingCorrections } from './corrections.js';
+import { handleCreateCorrection, handleReviewCorrection, handleApplyCorrection, handleGetSurahCorrections, handleGetPendingCorrections, handleExportJson } from './corrections.js';
 import { handleTTS } from './tts.js';
 
 export default {
@@ -34,6 +34,9 @@ export default {
     }
     if (pathname === '/api/users/reset-password' && request.method === 'POST') {
       return handleResetPassword(request, env);
+    }
+    if (pathname === '/api/admin/export-json' && request.method === 'GET') {
+      return handleExportJson(request, env);
     }
     if (pathname === '/api/admin/bootstrap' && request.method === 'POST') {
       return handleBootstrapAdmin(request, env);

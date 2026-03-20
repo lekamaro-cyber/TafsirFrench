@@ -222,6 +222,54 @@ export async function handleGetPendingCorrections(request, env) {
 }
 
 /**
+ * GET /api/admin/export-json
+ * Download the tafsir JSON with all applied corrections merged in.
+ * Admin only.
+ */
+export async function handleExportJson(request, env) {
+  const { error, session } = await requireRole(request, env, 'admin');
+  if (error) return error;
+
+  // Fetch the original JSON from static assets
+  const assetUrl = new URL('/data/tafsir_fr.json', request.url);
+  const assetRes = await env.ASSETS.fetch(new Request(assetUrl));
+  if (!assetRes.ok) {
+    return jsonResponse({ error: 'Impossible de lire le fichier JSON original.' }, 500);
+  }
+  const tafsir = await assetRes.json();
+
+  // Fetch all applied corrections
+  const indexData = await env.TAFSIR_AUTH.get('corrections_index');
+  const index = indexData ? JSON.parse(indexData) : { surahs: [] };
+
+  let appliedCount = 0;
+  for (const surahNum of index.surahs) {
+    const data = await env.TAFSIR_AUTH.get(`corrections:${surahNum}`);
+    if (!data) continue;
+    const corrections = JSON.parse(data);
+    const applied = corrections.filter(c => c.status === 'applied');
+    for (const c of applied) {
+      const surahKey = String(c.surah);
+      const verseKey = String(c.verse);
+      if (tafsir[surahKey] && tafsir[surahKey][verseKey] !== undefined) {
+        tafsir[surahKey][verseKey] = c.correctedText;
+        appliedCount++;
+      }
+    }
+  }
+
+  const json = JSON.stringify(tafsir, null, 2);
+  return new Response(json, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Disposition': `attachment; filename="tafsir_fr_corrige.json"`,
+      'X-Corrections-Applied': String(appliedCount),
+    },
+  });
+}
+
+/**
  * Update the global corrections index for quick dashboard stats.
  */
 async function updateCorrectionIndex(env) {
