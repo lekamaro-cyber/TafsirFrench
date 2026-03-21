@@ -2,6 +2,11 @@ name = "tafsirfrench"
 compatibility_date = "2024-12-01"
 main = "./site/worker.js"
 
+routes = [
+  { pattern = "tafsir-french.org", custom_domain = true },
+  { pattern = "www.tafsir-french.org", custom_domain = true },
+]
+
 [assets]
 directory = "./site/dist"
 
