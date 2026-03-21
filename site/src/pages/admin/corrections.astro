@@ -54,6 +54,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   <script>
     let currentUser = null;
     let allCorrections = [];
+    let approvalsRequired = 2;
     let currentFilter = 'pending';
 
     (async () => {
@@ -95,6 +96,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         }
         const data = await res.json();
         allCorrections = data.corrections || [];
+        approvalsRequired = data.approvalsRequired || 2;
 
         updateStats();
         renderCorrections();
@@ -172,7 +174,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             </div>
 
             <div class="correction-approvals">
-              <span>Approbations : ${(c.approvals || []).length}/${data.approvalsRequired || 2}</span>
+              <span>Approbations : ${(c.approvals || []).length}/${approvalsRequired}</span>
               ${(c.approvals || []).map(a => `<span class="approval-badge">${escapeHtml(a.name)}</span>`).join('')}
               ${(c.rejections || []).length > 0 ? `<span class="rejection-badge">Rejete par ${c.rejections.map(r => escapeHtml(r.name)).join(', ')}</span>` : ''}
             </div>
