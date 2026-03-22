@@ -5,6 +5,7 @@ import { handleTTS } from './tts.js';
 
 export default {
   async fetch(request, env) {
+    try {
     const url = new URL(request.url);
     const { pathname } = url;
 
@@ -107,5 +108,11 @@ export default {
 
     // Everything else is handled by static assets (configured in wrangler.toml)
     return env.ASSETS.fetch(request);
+    } catch (err) {
+      return new Response(JSON.stringify({ error: 'Erreur interne du serveur: ' + err.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   },
 };
