@@ -106,6 +106,14 @@ export default {
       return handleTTS(request, env);
     }
 
+    // Debug: catch unmatched API routes
+    if (pathname.startsWith('/api/')) {
+      return new Response(JSON.stringify({ error: 'Route API non trouvee', pathname, method: request.method }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // Everything else is handled by static assets (configured in wrangler.toml)
     return env.ASSETS.fetch(request);
     } catch (err) {

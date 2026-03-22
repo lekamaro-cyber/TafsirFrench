@@ -960,6 +960,12 @@ var index_default = {
       if (pathname === "/api/tts" && request.method === "POST") {
         return handleTTS(request, env);
       }
+      if (pathname.startsWith("/api/")) {
+        return new Response(JSON.stringify({ error: "Route API non trouvee", pathname, method: request.method }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
       return env.ASSETS.fetch(request);
     } catch (err) {
       return new Response(JSON.stringify({ error: "Erreur interne du serveur: " + err.message }), {
