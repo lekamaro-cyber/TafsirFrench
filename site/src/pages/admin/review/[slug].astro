@@ -794,6 +794,8 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       }
       // Stop browser TTS
       if (synth) synth.cancel();
+      // Clean up word highlighting
+      if (ttsCurrentVerse) unwrapWords(ttsCurrentVerse);
       ttsPlaying = false;
       ttsPlayAllMode = false;
       resetAllTTSButtons();
@@ -840,7 +842,7 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     }
 
     function highlightVerse(verseNum) {
-      removeTextHighlight();
+      removeVerseHighlight();
       const el = document.getElementById(`v${verseNum}`);
       if (el) {
         el.classList.add('verse-speaking');
@@ -848,8 +850,86 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       }
     }
 
-    function removeTextHighlight() {
+    function removeVerseHighlight() {
       document.querySelectorAll('.verse-speaking').forEach(el => el.classList.remove('verse-speaking'));
+    }
+
+    // ---- Word-level highlighting during TTS ----
+    let wordSpans = [];
+    let currentWordIndex = -1;
+    let wordTimerId = null;
+
+    function wrapWordsInSpans(verseNum) {
+      const textEl = document.querySelector(`#v${verseNum} .verse-review-text`);
+      if (!textEl || textEl.dataset.wrapped) return;
+      const text = textEl.textContent;
+      // Split into words keeping whitespace structure
+      const parts = text.split(/(\s+)/);
+      textEl.innerHTML = '';
+      wordSpans = [];
+      for (const part of parts) {
+        if (/\s+/.test(part)) {
+          textEl.appendChild(document.createTextNode(part));
+        } else if (part) {
+          const span = document.createElement('span');
+          span.className = 'tts-word';
+          span.textContent = part;
+          textEl.appendChild(span);
+          wordSpans.push(span);
+        }
+      }
+      textEl.dataset.wrapped = '1';
+    }
+
+    function unwrapWords(verseNum) {
+      const textEl = document.querySelector(`#v${verseNum} .verse-review-text`);
+      if (!textEl || !textEl.dataset.wrapped) return;
+      textEl.textContent = textEl.textContent;
+      delete textEl.dataset.wrapped;
+      wordSpans = [];
+      currentWordIndex = -1;
+    }
+
+    function highlightWord(index) {
+      // Remove previous highlight
+      if (currentWordIndex >= 0 && currentWordIndex < wordSpans.length) {
+        wordSpans[currentWordIndex].classList.remove('tts-word-active');
+      }
+      currentWordIndex = index;
+      if (index >= 0 && index < wordSpans.length) {
+        const span = wordSpans[index];
+        span.classList.add('tts-word-active');
+        // Auto-scroll to keep highlighted word visible
+        span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    function clearWordHighlight() {
+      if (wordTimerId) { clearInterval(wordTimerId); wordTimerId = null; }
+      wordSpans.forEach(s => s.classList.remove('tts-word-active'));
+      currentWordIndex = -1;
+    }
+
+    function removeTextHighlight() {
+      clearWordHighlight();
+      removeVerseHighlight();
+    }
+
+    // Start word-by-word timer estimation (for Workers AI audio)
+    function startWordTimer(verseNum, durationEstimate) {
+      if (wordSpans.length === 0) return;
+      const interval = (durationEstimate * 1000) / wordSpans.length;
+      let idx = 0;
+      highlightWord(0);
+      wordTimerId = setInterval(() => {
+        idx++;
+        if (idx < wordSpans.length) {
+          highlightWord(idx);
+        } else {
+          clearInterval(wordTimerId);
+          wordTimerId = null;
+        }
+      }, interval);
     }
 
     function onVerseEnd(verseNum) {
@@ -889,6 +969,9 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       setVerseBtnPlaying(verseNum, 'loading');
       highlightVerse(verseNum);
 
+      // Wrap words for highlighting
+      wrapWordsInSpans(verseNum);
+
       try {
         let audioUrl = audioCache[`${surahNumber}:${verseNum}`];
 
@@ -902,7 +985,6 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
           if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             if (err.fallback) {
-              // Workers AI unavailable, switch to browser TTS
               useWorkersAI = false;
               showToast('Voix IA indisponible, utilisation de la voix navigateur.', 'error');
               speakVerseBrowser(verseNum, text);
@@ -927,19 +1009,31 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
 
         setVerseBtnPlaying(verseNum, 'playing');
 
+        // Use loadedmetadata to get duration for word timer
+        audio.onloadedmetadata = () => {
+          if (audio.duration && audio.duration > 0) {
+            startWordTimer(verseNum, audio.duration / audio.playbackRate);
+          }
+        };
+
         audio.onended = () => {
           currentAudio = null;
+          clearWordHighlight();
+          unwrapWords(verseNum);
           onVerseEnd(verseNum);
         };
         audio.onerror = () => {
           currentAudio = null;
+          clearWordHighlight();
+          unwrapWords(verseNum);
           onVerseError(verseNum);
         };
 
         await audio.play();
       } catch (e) {
         console.error('Workers AI TTS error:', e);
-        // Fallback to browser TTS
+        clearWordHighlight();
+        unwrapWords(verseNum);
         useWorkersAI = false;
         showToast('Voix IA indisponible, utilisation de la voix navigateur.', 'error');
         speakVerseBrowser(verseNum, text);
@@ -957,6 +1051,9 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       synth.cancel();
       resetAllTTSButtons();
 
+      // Wrap words for highlighting
+      wrapWordsInSpans(verseNum);
+
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'fr-FR';
       utterance.rate = getSpeed();
@@ -968,8 +1065,25 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       setVerseBtnPlaying(verseNum, 'playing');
       highlightVerse(verseNum);
 
-      utterance.onend = () => onVerseEnd(verseNum);
-      utterance.onerror = () => onVerseError(verseNum);
+      // Word boundary event — highlight word being spoken
+      let boundaryWordIndex = 0;
+      utterance.onboundary = (e) => {
+        if (e.name === 'word') {
+          highlightWord(boundaryWordIndex);
+          boundaryWordIndex++;
+        }
+      };
+
+      utterance.onend = () => {
+        clearWordHighlight();
+        unwrapWords(verseNum);
+        onVerseEnd(verseNum);
+      };
+      utterance.onerror = () => {
+        clearWordHighlight();
+        unwrapWords(verseNum);
+        onVerseError(verseNum);
+      };
 
       // Chrome workaround for long texts
       let resumeInterval = null;
@@ -1514,6 +1628,21 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
   .verse-review.verse-speaking.verse-validated {
     border-color: var(--color-primary);
     background: #ecfdf5;
+  }
+
+  /* Word-level highlight during TTS */
+  .tts-word {
+    transition: background-color 0.15s ease, color 0.15s ease;
+    border-radius: 3px;
+    padding: 1px 2px;
+    margin: -1px -2px;
+  }
+  .tts-word-active {
+    background-color: #fbbf24;
+    color: #1a1a1a;
+    border-radius: 3px;
+    padding: 1px 2px;
+    margin: -1px -2px;
   }
 
   /* Toast notifications */
