@@ -95,11 +95,13 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
         });
-        const json = await res.json();
-        if (!res.ok) return showError(json.error);
+        const text = await res.text();
+        let json;
+        try { json = JSON.parse(text); } catch { return showError('Reponse invalide du serveur: ' + text.substring(0, 200)); }
+        if (!res.ok) return showError(json.error || 'Erreur ' + res.status);
         window.location.href = '/admin/';
-      } catch {
-        showError('Erreur de connexion au serveur.');
+      } catch (err) {
+        showError('Erreur de connexion au serveur: ' + err.message);
       }
     });
 
@@ -113,8 +115,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
         });
-        const json = await res.json();
-        if (!res.ok) return showError(json.error);
+        const text = await res.text();
+        let json;
+        try { json = JSON.parse(text); } catch { return showError('Reponse invalide du serveur: ' + text.substring(0, 200)); }
+        if (!res.ok) return showError(json.error || 'Erreur ' + res.status);
         // Auto-login after register
         const loginRes = await fetch('/api/auth/login', {
           method: 'POST',
@@ -123,9 +127,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         });
         if (loginRes.ok) {
           window.location.href = '/admin/';
+        } else {
+          showError('Compte cree mais erreur de connexion. Essayez de vous connecter manuellement.');
         }
-      } catch {
-        showError('Erreur de connexion au serveur.');
+      } catch (err) {
+        showError('Erreur de connexion au serveur: ' + err.message);
       }
     });
   </script>
