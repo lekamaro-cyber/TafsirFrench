@@ -846,7 +846,6 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       const el = document.getElementById(`v${verseNum}`);
       if (el) {
         el.classList.add('verse-speaking');
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
 
@@ -899,8 +898,6 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       if (index >= 0 && index < wordSpans.length) {
         const span = wordSpans[index];
         span.classList.add('tts-word-active');
-        // Auto-scroll to keep highlighted word visible
-        span.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
 
