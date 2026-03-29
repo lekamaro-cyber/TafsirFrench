@@ -84,31 +84,36 @@ async function handleSendCode(request, env) {
   await env.TAFSIR_AUTH.put(`email_code:${normalizedEmail}`, code, { expirationTtl: 600 });
   await env.TAFSIR_AUTH.put(rateLimitKey, "1", { expirationTtl: 60 });
   try {
-    const mailRes = await fetch("https://api.mailchannels.net/tx/v1/send", {
+    const resendKey = env.RESEND_API_KEY;
+    if (!resendKey) {
+      console.error("RESEND_API_KEY not configured");
+      return jsonResponse({ error: "Service email non configure." }, 500);
+    }
+    const mailRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${resendKey}`
+      },
       body: JSON.stringify({
-        personalizations: [{ to: [{ email: normalizedEmail }] }],
-        from: { email: "noreply@tafsir-french.org", name: "Tafsir French" },
+        from: "Tafsir French <noreply@tafsir-french.org>",
+        to: [normalizedEmail],
         subject: "Votre code de verification - Tafsir French",
-        content: [{
-          type: "text/html",
-          value: `
-            <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
-              <h2 style="color: #1e40af; margin-bottom: 1rem;">Verification de votre email</h2>
-              <p>Votre code de verification est :</p>
-              <div style="background: #f0f4ff; border: 2px solid #2563eb; border-radius: 8px; padding: 1rem; text-align: center; margin: 1.5rem 0;">
-                <span style="font-size: 2rem; font-weight: bold; letter-spacing: 0.3em; color: #1e40af;">${code}</span>
-              </div>
-              <p style="color: #6b7280; font-size: 0.9rem;">Ce code expire dans 10 minutes. Si vous n'avez pas demande ce code, ignorez cet email.</p>
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
+            <h2 style="color: #1e40af; margin-bottom: 1rem;">Verification de votre email</h2>
+            <p>Votre code de verification est :</p>
+            <div style="background: #f0f4ff; border: 2px solid #2563eb; border-radius: 8px; padding: 1rem; text-align: center; margin: 1.5rem 0;">
+              <span style="font-size: 2rem; font-weight: bold; letter-spacing: 0.3em; color: #1e40af;">${code}</span>
             </div>
-          `
-        }]
+            <p style="color: #6b7280; font-size: 0.9rem;">Ce code expire dans 10 minutes. Si vous n'avez pas demande ce code, ignorez cet email.</p>
+          </div>
+        `
       })
     });
     if (!mailRes.ok) {
-      const errText = await mailRes.text().catch(() => "");
-      console.error("MailChannels error:", mailRes.status, errText);
+      const errBody = await mailRes.json().catch(() => ({}));
+      console.error("Resend error:", mailRes.status, JSON.stringify(errBody));
       return jsonResponse({ error: "Impossible d'envoyer l'email. Verifiez votre adresse." }, 502);
     }
   } catch (e) {
