@@ -764,6 +764,10 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     let ttsPlayAllIndex = 0;
     let currentAudio = null; // For Workers AI audio playback
     let useWorkersAI = true; // Try Workers AI first, fallback to browser
+    let aiFailCount = 0; // Track consecutive AI failures
+    const AI_MAX_FAILS = 3; // After this many consecutive failures, temporarily use browser
+    let aiFallbackVerses = 0; // Count verses played in fallback before retrying AI
+    const AI_RETRY_AFTER = 5; // Retry AI after this many browser-fallback verses
     let frenchVoice = null;
 
     // Load browser voices as fallback
@@ -960,6 +964,37 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
     // ---- Workers AI TTS (natural voice via MeloTTS) ----
     const audioCache = {};
 
+    async function fetchTTSWithRetry(text, retries = 2) {
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          const res = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+          });
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            if (err.fallback) {
+              // Server says AI unavailable - no point retrying immediately
+              return { fallback: true };
+            }
+            if (attempt < retries) continue;
+            return { error: err.error || 'Erreur TTS' };
+          }
+
+          const blob = await res.blob();
+          return { blob };
+        } catch (e) {
+          if (attempt < retries) {
+            await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+            continue;
+          }
+          return { error: e.message || 'Erreur reseau' };
+        }
+      }
+    }
+
     async function speakVerseAI(verseNum, text) {
       ttsPlaying = true;
       ttsCurrentVerse = verseNum;
@@ -973,27 +1008,30 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
         let audioUrl = audioCache[`${surahNumber}:${verseNum}`];
 
         if (!audioUrl) {
-          const res = await fetch('/api/tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text }),
-          });
+          const result = await fetchTTSWithRetry(text);
 
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            if (err.fallback) {
+          if (result.fallback || result.error) {
+            // Fallback for this verse only, increment fail counter
+            aiFailCount++;
+            clearWordHighlight();
+            unwrapWords(verseNum);
+            if (aiFailCount >= AI_MAX_FAILS) {
               useWorkersAI = false;
-              showToast('Voix IA indisponible, utilisation de la voix navigateur.', 'error');
-              speakVerseBrowser(verseNum, text);
-              return;
+              aiFallbackVerses = 0;
+              showToast('Voix IA temporairement indisponible, basculement sur la voix navigateur.', 'error');
+            } else {
+              showToast('Voix IA indisponible pour ce verset, utilisation de la voix navigateur.', 'error');
             }
-            throw new Error(err.error || 'Erreur TTS');
+            speakVerseBrowser(verseNum, text);
+            return;
           }
 
-          const blob = await res.blob();
-          audioUrl = URL.createObjectURL(blob);
+          audioUrl = URL.createObjectURL(result.blob);
           audioCache[`${surahNumber}:${verseNum}`] = audioUrl;
         }
+
+        // AI succeeded - reset fail counter
+        aiFailCount = 0;
 
         if (currentAudio) {
           currentAudio.pause();
@@ -1031,8 +1069,14 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
         console.error('Workers AI TTS error:', e);
         clearWordHighlight();
         unwrapWords(verseNum);
-        useWorkersAI = false;
-        showToast('Voix IA indisponible, utilisation de la voix navigateur.', 'error');
+        aiFailCount++;
+        if (aiFailCount >= AI_MAX_FAILS) {
+          useWorkersAI = false;
+          aiFallbackVerses = 0;
+          showToast('Voix IA temporairement indisponible, basculement sur la voix navigateur.', 'error');
+        } else {
+          showToast('Voix IA indisponible pour ce verset, utilisation de la voix navigateur.', 'error');
+        }
         speakVerseBrowser(verseNum, text);
       }
     }
@@ -1108,6 +1152,16 @@ const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumb
       if (!text) return;
 
       stopTTS();
+
+      // If AI was disabled due to repeated failures, periodically retry
+      if (!useWorkersAI) {
+        aiFallbackVerses++;
+        if (aiFallbackVerses >= AI_RETRY_AFTER) {
+          useWorkersAI = true;
+          aiFailCount = 0;
+          aiFallbackVerses = 0;
+        }
+      }
 
       if (useWorkersAI) {
         speakVerseAI(verseNum, text);
