@@ -36,18 +36,39 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
       <!-- Register form -->
       <form id="register-form" style="display:none;">
-        <label style="display:block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Nom</label>
-        <input type="text" name="name" required style="width:100%; padding: 0.6rem 0.75rem; border: 1px solid var(--color-border); border-radius: 6px; margin-bottom: 1rem; font-size: 0.95rem; box-sizing: border-box;" />
+        <!-- Step 1: Email + Send code -->
+        <div id="reg-step1">
+          <label style="display:block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Email</label>
+          <input type="email" name="email" required id="reg-email" style="width:100%; padding: 0.6rem 0.75rem; border: 1px solid var(--color-border); border-radius: 6px; margin-bottom: 1rem; font-size: 0.95rem; box-sizing: border-box;" />
 
-        <label style="display:block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Email</label>
-        <input type="email" name="email" required style="width:100%; padding: 0.6rem 0.75rem; border: 1px solid var(--color-border); border-radius: 6px; margin-bottom: 1rem; font-size: 0.95rem; box-sizing: border-box;" />
+          <button type="button" id="send-code-btn" style="width:100%; padding: 0.7rem; background: var(--color-primary, #2563eb); color: white; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; font-weight: 600;">
+            Envoyer le code de verification
+          </button>
+        </div>
 
-        <label style="display:block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Mot de passe</label>
-        <input type="password" name="password" required minlength="6" style="width:100%; padding: 0.6rem 0.75rem; border: 1px solid var(--color-border); border-radius: 6px; margin-bottom: 1.5rem; font-size: 0.95rem; box-sizing: border-box;" />
+        <!-- Step 2: Enter code + complete registration -->
+        <div id="reg-step2" style="display:none;">
+          <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.85rem; color: #166534;">
+            Un code a 6 chiffres a ete envoye a <strong id="reg-email-display"></strong>
+          </div>
 
-        <button type="submit" style="width:100%; padding: 0.7rem; background: var(--color-primary, #2563eb); color: white; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; font-weight: 600;">
-          Creer mon compte
-        </button>
+          <label style="display:block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Code de verification</label>
+          <input type="text" name="code" required id="reg-code" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" style="width:100%; padding: 0.6rem 0.75rem; border: 1px solid var(--color-border); border-radius: 6px; margin-bottom: 1rem; font-size: 1.2rem; box-sizing: border-box; text-align: center; letter-spacing: 0.3em; font-weight: 600;" />
+
+          <label style="display:block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Nom</label>
+          <input type="text" name="name" required style="width:100%; padding: 0.6rem 0.75rem; border: 1px solid var(--color-border); border-radius: 6px; margin-bottom: 1rem; font-size: 0.95rem; box-sizing: border-box;" />
+
+          <label style="display:block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500;">Mot de passe</label>
+          <input type="password" name="password" required minlength="6" style="width:100%; padding: 0.6rem 0.75rem; border: 1px solid var(--color-border); border-radius: 6px; margin-bottom: 1rem; font-size: 0.95rem; box-sizing: border-box;" />
+
+          <button type="submit" style="width:100%; padding: 0.7rem; background: var(--color-primary, #2563eb); color: white; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; font-weight: 600;">
+            Creer mon compte
+          </button>
+
+          <button type="button" id="resend-code-btn" style="width:100%; padding: 0.5rem; background: none; border: none; color: var(--color-text-muted); font-size: 0.85rem; cursor: pointer; margin-top: 0.5rem; text-decoration: underline;">
+            Renvoyer le code
+          </button>
+        </div>
       </form>
     </div>
   </div>
@@ -105,15 +126,62 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       }
     });
 
+    // Registration: Step 1 - Send verification code
+    const sendCodeBtn = document.getElementById('send-code-btn');
+    const resendCodeBtn = document.getElementById('resend-code-btn');
+    const regStep1 = document.getElementById('reg-step1');
+    const regStep2 = document.getElementById('reg-step2');
+    const regEmailInput = document.getElementById('reg-email');
+    const regEmailDisplay = document.getElementById('reg-email-display');
+
+    async function sendVerificationCode() {
+      errorDiv.style.display = 'none';
+      const email = regEmailInput.value.trim();
+      if (!email) return showError('Veuillez entrer votre email.');
+
+      sendCodeBtn.disabled = true;
+      sendCodeBtn.textContent = 'Envoi en cours...';
+      if (resendCodeBtn) { resendCodeBtn.disabled = true; }
+
+      try {
+        const res = await fetch('/api/auth/send-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const text = await res.text();
+        let json;
+        try { json = JSON.parse(text); } catch { return showError('Reponse invalide du serveur.'); }
+        if (!res.ok) return showError(json.error || 'Erreur ' + res.status);
+
+        // Show step 2
+        regStep1.style.display = 'none';
+        regStep2.style.display = 'block';
+        regEmailDisplay.textContent = email;
+        document.getElementById('reg-code').focus();
+      } catch (err) {
+        showError('Erreur de connexion au serveur: ' + err.message);
+      } finally {
+        sendCodeBtn.disabled = false;
+        sendCodeBtn.textContent = 'Envoyer le code de verification';
+        if (resendCodeBtn) { resendCodeBtn.disabled = false; }
+      }
+    }
+
+    sendCodeBtn.addEventListener('click', sendVerificationCode);
+    resendCodeBtn.addEventListener('click', sendVerificationCode);
+
+    // Registration: Step 2 - Submit with code
     registerForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorDiv.style.display = 'none';
-      const data = Object.fromEntries(new FormData(registerForm));
+      const formData = Object.fromEntries(new FormData(registerForm));
+      formData.email = regEmailInput.value.trim();
       try {
         const res = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
+          body: JSON.stringify(formData),
         });
         const text = await res.text();
         let json;
@@ -123,7 +191,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         const loginRes = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: data.email, password: data.password }),
+          body: JSON.stringify({ email: formData.email, password: formData.password }),
         });
         if (loginRes.ok) {
           window.location.href = '/admin/';

@@ -77,16 +77,109 @@ export async function requireRole(request, env, ...allowedRoles) {
   return { session };
 }
 
+/**
+ * POST /api/auth/send-code
+ * Body: { email: string }
+ * Sends a 6-digit verification code to the email address.
+ */
+export async function handleSendCode(request, env) {
+  const { email } = await request.json();
+  if (!email) {
+    return jsonResponse({ error: 'Email requis.' }, 400);
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+
+  // Basic email format validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(normalizedEmail)) {
+    return jsonResponse({ error: 'Format d\'email invalide.' }, 400);
+  }
+
+  // Check if already registered
+  const existing = await env.TAFSIR_AUTH.get(`user:${normalizedEmail}`);
+  if (existing) {
+    return jsonResponse({ error: 'Cet email est deja utilise.' }, 409);
+  }
+
+  // Rate limit: max 1 code per email per 60 seconds
+  const rateLimitKey = `code_rate:${normalizedEmail}`;
+  const lastSent = await env.TAFSIR_AUTH.get(rateLimitKey);
+  if (lastSent) {
+    return jsonResponse({ error: 'Un code a deja ete envoye. Attendez 60 secondes.' }, 429);
+  }
+
+  // Generate 6-digit code
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+
+  // Store code in KV with 10-minute TTL
+  await env.TAFSIR_AUTH.put(`email_code:${normalizedEmail}`, code, { expirationTtl: 600 });
+  // Rate limit: 60 seconds
+  await env.TAFSIR_AUTH.put(rateLimitKey, '1', { expirationTtl: 60 });
+
+  // Send email via MailChannels
+  try {
+    const mailRes = await fetch('https://api.mailchannels.net/tx/v1/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: normalizedEmail }] }],
+        from: { email: 'noreply@tafsir-french.org', name: 'Tafsir French' },
+        subject: 'Votre code de verification - Tafsir French',
+        content: [{
+          type: 'text/html',
+          value: `
+            <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
+              <h2 style="color: #1e40af; margin-bottom: 1rem;">Verification de votre email</h2>
+              <p>Votre code de verification est :</p>
+              <div style="background: #f0f4ff; border: 2px solid #2563eb; border-radius: 8px; padding: 1rem; text-align: center; margin: 1.5rem 0;">
+                <span style="font-size: 2rem; font-weight: bold; letter-spacing: 0.3em; color: #1e40af;">${code}</span>
+              </div>
+              <p style="color: #6b7280; font-size: 0.9rem;">Ce code expire dans 10 minutes. Si vous n'avez pas demande ce code, ignorez cet email.</p>
+            </div>
+          `,
+        }],
+      }),
+    });
+
+    if (!mailRes.ok) {
+      const errText = await mailRes.text().catch(() => '');
+      console.error('MailChannels error:', mailRes.status, errText);
+      return jsonResponse({ error: 'Impossible d\'envoyer l\'email. Verifiez votre adresse.' }, 502);
+    }
+  } catch (e) {
+    console.error('Email send error:', e);
+    return jsonResponse({ error: 'Erreur lors de l\'envoi de l\'email.' }, 500);
+  }
+
+  return jsonResponse({ ok: true, message: 'Code envoye.' });
+}
+
 export async function handleRegister(request, env) {
-  const { email, password, name } = await request.json();
-  if (!email || !password || !name) {
-    return jsonResponse({ error: 'Tous les champs sont requis.' }, 400);
+  const { email, password, name, code } = await request.json();
+  if (!email || !password || !name || !code) {
+    return jsonResponse({ error: 'Tous les champs sont requis (y compris le code de verification).' }, 400);
   }
   if (password.length < 6) {
     return jsonResponse({ error: 'Le mot de passe doit faire au moins 6 caracteres.' }, 400);
   }
 
-  const key = `user:${email.trim().toLowerCase()}`;
+  const normalizedEmail = email.trim().toLowerCase();
+
+  // Verify the code
+  const codeKey = `email_code:${normalizedEmail}`;
+  const storedCode = await env.TAFSIR_AUTH.get(codeKey);
+  if (!storedCode) {
+    return jsonResponse({ error: 'Code expire ou non envoye. Demandez un nouveau code.' }, 400);
+  }
+  if (storedCode !== code.trim()) {
+    return jsonResponse({ error: 'Code de verification incorrect.' }, 400);
+  }
+
+  // Code verified - delete it
+  await env.TAFSIR_AUTH.delete(codeKey);
+
+  const key = `user:${normalizedEmail}`;
   const existing = await env.TAFSIR_AUTH.get(key);
   if (existing) {
     return jsonResponse({ error: 'Cet email est deja utilise.' }, 409);
@@ -99,7 +192,7 @@ export async function handleRegister(request, env) {
 
   const user = {
     id: generateId(),
-    email: email.trim().toLowerCase(),
+    email: normalizedEmail,
     name: name.trim(),
     password: await createHash(password),
     role,

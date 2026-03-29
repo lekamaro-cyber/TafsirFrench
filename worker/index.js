@@ -1,4 +1,4 @@
-import { handleRegister, handleLogin, handleLogout, handleMe, handleListUsers, handleChangeRole, handleDeleteUser, handleResetPassword, handleBootstrapAdmin, handleCreateRoleRequest, handleMyRoleRequest, handleListRoleRequests, handleResolveRoleRequest } from './auth.js';
+import { handleSendCode, handleRegister, handleLogin, handleLogout, handleMe, handleListUsers, handleChangeRole, handleDeleteUser, handleResetPassword, handleBootstrapAdmin, handleCreateRoleRequest, handleMyRoleRequest, handleListRoleRequests, handleResolveRoleRequest } from './auth.js';
 import { handleCastVote, handleRemoveVote, handleGetSurahVotes, handleGetVotesSummary, handleInitSurah, handleCreateReport, handleResolveReport, handleGetSurahReports } from './votes.js';
 import { handleCreateCorrection, handleReviewCorrection, handleApplyCorrection, handleGetSurahCorrections, handleGetPendingCorrections, handleExportJson } from './corrections.js';
 import { handleTTS } from './tts.js';
@@ -10,6 +10,9 @@ export default {
     const { pathname } = url;
 
     // Auth API routes
+    if (pathname === '/api/auth/send-code' && request.method === 'POST') {
+      return handleSendCode(request, env);
+    }
     if (pathname === '/api/auth/register' && request.method === 'POST') {
       return handleRegister(request, env);
     }
