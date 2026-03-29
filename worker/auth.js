@@ -117,25 +117,25 @@ export async function handleSendCode(request, env) {
   // Rate limit: 60 seconds
   await env.TAFSIR_AUTH.put(rateLimitKey, '1', { expirationTtl: 60 });
 
-  // Send email via Resend
+  // Send email via Brevo (ex-Sendinblue)
   try {
-    const resendKey = env.RESEND_API_KEY;
-    if (!resendKey) {
-      console.error('RESEND_API_KEY not configured');
+    const brevoKey = env.BREVO_API_KEY;
+    if (!brevoKey) {
+      console.error('BREVO_API_KEY not configured');
       return jsonResponse({ error: 'Service email non configure.' }, 500);
     }
 
-    const mailRes = await fetch('https://api.resend.com/emails', {
+    const mailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${resendKey}`,
+        'api-key': brevoKey,
       },
       body: JSON.stringify({
-        from: 'Tafsir French <noreply@tafsir-french.org>',
-        to: [normalizedEmail],
+        sender: { name: 'Tafsir French', email: 'noreply@tafsir-french.org' },
+        to: [{ email: normalizedEmail }],
         subject: 'Votre code de verification - Tafsir French',
-        html: `
+        htmlContent: `
           <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
             <h2 style="color: #1e40af; margin-bottom: 1rem;">Verification de votre email</h2>
             <p>Votre code de verification est :</p>
@@ -150,7 +150,7 @@ export async function handleSendCode(request, env) {
 
     if (!mailRes.ok) {
       const errBody = await mailRes.json().catch(() => ({}));
-      console.error('Resend error:', mailRes.status, JSON.stringify(errBody));
+      console.error('Brevo error:', mailRes.status, JSON.stringify(errBody));
       return jsonResponse({ error: 'Impossible d\'envoyer l\'email. Verifiez votre adresse.' }, 502);
     }
   } catch (e) {
