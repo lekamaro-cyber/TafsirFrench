@@ -119,9 +119,9 @@ export async function handleSendCode(request, env) {
 
   // Send email via Brevo (ex-Sendinblue)
   try {
-    const brevoKey = env.BREVO_API_KEY;
+    const brevoKey = env.RESEND_API_KEY;
     if (!brevoKey) {
-      console.error('BREVO_API_KEY not configured');
+      console.error('RESEND_API_KEY (Brevo) not configured');
       return jsonResponse({ error: 'Service email non configure.' }, 500);
     }
 

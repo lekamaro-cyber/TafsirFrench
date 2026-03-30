@@ -84,9 +84,9 @@ async function handleSendCode(request, env) {
   await env.TAFSIR_AUTH.put(`email_code:${normalizedEmail}`, code, { expirationTtl: 600 });
   await env.TAFSIR_AUTH.put(rateLimitKey, "1", { expirationTtl: 60 });
   try {
-    const brevoKey = env.BREVO_API_KEY;
+    const brevoKey = env.RESEND_API_KEY;
     if (!brevoKey) {
-      console.error("BREVO_API_KEY not configured");
+      console.error("RESEND_API_KEY (Brevo) not configured");
       return jsonResponse({ error: "Service email non configure." }, 500);
     }
     const mailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
