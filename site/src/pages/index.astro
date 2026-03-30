@@ -3,9 +3,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import { getPublishedSurahs } from '../lib/content.js';
 
 const surahs = getPublishedSurahs();
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "Tafsir en Francais",
+  "url": "https://tafsir-french.org",
+  "description": "Tafsir du Coran en langue francaise - Exegese et commentaire (Ibn Kathir). Projet collaboratif de relecture et correction.",
+  "inLanguage": "fr",
+};
 ---
 
-<BaseLayout title="Accueil">
+<BaseLayout title="Accueil" description="Tafsir du Coran en langue francaise - Exegese et commentaire d'Ibn Kathir. Projet collaboratif de relecture, correction et publication des 114 sourates." jsonLd={jsonLd}>
   <section class="hero">
     <div class="container">
       <h1>Tafsir du Coran en Francais</h1>

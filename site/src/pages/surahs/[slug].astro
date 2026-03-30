@@ -13,9 +13,24 @@ export function getStaticPaths() {
 const { surahNumber } = Astro.props;
 const meta = getSurahMeta(surahNumber);
 const verses = getSurahTafsir(surahNumber);
+
+const surahDescription = `Tafsir de la sourate ${meta.name_fr} (${meta.name_ar} - ${meta.translit}) - Sourate ${meta.number}, ${meta.verses} versets, revelation ${meta.type}. Exegese et commentaire en francais.`;
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "name": `Tafsir ${meta.name_fr} (${meta.name_ar})`,
+  "description": surahDescription,
+  "inLanguage": "fr",
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Tafsir en Francais",
+    "url": "https://tafsir-french.org",
+  },
+};
 ---
 
-<BaseLayout title={`${meta.name_fr} - ${meta.name_ar}`}>
+<BaseLayout title={`${meta.name_fr} - ${meta.name_ar}`} description={surahDescription} jsonLd={jsonLd}>
   <div class="container">
     <div class="surah-header">
       <div class="name-ar">{meta.name_ar}</div>

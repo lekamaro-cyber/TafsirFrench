@@ -36,7 +36,7 @@ const prevSurah = surahNumber > 1 ? allSurahs.find(s => s.number === surahNumber
 const nextSurah = surahNumber < 114 ? allSurahs.find(s => s.number === surahNumber + 1) : null;
 ---
 
-<BaseLayout title={`Relecture - ${meta.name_fr}`}>
+<BaseLayout title={`Relecture - ${meta.name_fr}`} noindex={true}>
   <div class="container-wide">
     <!-- Breadcrumb + nav -->
     <div style="padding: 1rem 0; font-size: 0.9rem; color: var(--color-text-muted); display: flex; justify-content: space-between; align-items: center;">

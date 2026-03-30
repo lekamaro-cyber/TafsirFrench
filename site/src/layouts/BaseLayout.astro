@@ -2,9 +2,21 @@
 export interface Props {
   title: string;
   description?: string;
+  noindex?: boolean;
+  ogImage?: string;
+  jsonLd?: object;
 }
 
-const { title, description = 'Tafsir du Coran en langue francaise' } = Astro.props;
+const {
+  title,
+  description = 'Tafsir du Coran en langue francaise - Exegese et commentaire (Ibn Kathir). Lecture, relecture collaborative et correction du texte.',
+  noindex = false,
+  ogImage,
+  jsonLd,
+} = Astro.props;
+
+const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+const fullTitle = `${title} | Tafsir en Francais`;
 ---
 
 <!DOCTYPE html>
@@ -13,8 +25,32 @@ const { title, description = 'Tafsir du Coran en langue francaise' } = Astro.pro
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content={description} />
-  <title>{title} | Tafsir en Francais</title>
+  <title>{fullTitle}</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="canonical" href={canonicalURL.href} />
+
+  {noindex && <meta name="robots" content="noindex, nofollow" />}
+
+  <!-- Open Graph -->
+  <meta property="og:title" content={fullTitle} />
+  <meta property="og:description" content={description} />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content={canonicalURL.href} />
+  <meta property="og:locale" content="fr_FR" />
+  <meta property="og:site_name" content="Tafsir en Francais" />
+  {ogImage && <meta property="og:image" content={ogImage} />}
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content={fullTitle} />
+  <meta name="twitter:description" content={description} />
+  {ogImage && <meta name="twitter:image" content={ogImage} />}
+
+  <!-- JSON-LD Structured Data -->
+  {jsonLd && (
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  )}
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet" />

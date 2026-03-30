@@ -5,7 +5,7 @@
   "description": "Plateforme de publication du Tafsir en francais",
   "scripts": {
     "dev": "node scripts/copy-pdfs.js && astro dev",
-    "build": "node scripts/copy-pdfs.js && astro build && node scripts/bundle-worker.js",
+    "build": "node scripts/copy-pdfs.js && astro build && node scripts/generate-sitemap.js && node scripts/bundle-worker.js",
     "preview": "astro preview",
     "sync": "node scripts/sync-content.js",
     "publish-scheduled": "node scripts/publish-scheduled.js",
