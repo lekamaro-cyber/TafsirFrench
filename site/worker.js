@@ -39,6 +39,64 @@ function jsonResponse(data, status = 200, extraHeaders = {}) {
 function setCookie(name, value, maxAge) {
   return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=${maxAge}`;
 }
+function escapeHtml(str) {
+  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+async function sendEmail(env, to, subject, htmlContent) {
+  try {
+    const brevoKey = env.BREVO_API_KEY;
+    if (!brevoKey) {
+      console.error("BREVO_API_KEY not configured");
+      return { ok: false, error: "Service email non configure." };
+    }
+    const recipients = Array.isArray(to) ? to.map((email) => ({ email })) : [{ email: to }];
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": brevoKey
+      },
+      body: JSON.stringify({
+        sender: { name: "Tafsir French", email: "noreply@tafsir-french.org" },
+        to: recipients,
+        subject,
+        htmlContent
+      })
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      console.error("Brevo error:", res.status, JSON.stringify(errBody));
+      return { ok: false, error: "Impossible d'envoyer l'email." };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error("Email send error:", e);
+    return { ok: false, error: "Erreur lors de l'envoi de l'email." };
+  }
+}
+async function getAdminEmails(env) {
+  const listData = await env.TAFSIR_AUTH.get("users_list");
+  if (!listData) return [];
+  const userList = JSON.parse(listData);
+  const admins = [];
+  for (const u of userList) {
+    const ud = await env.TAFSIR_AUTH.get(`user:${u.email}`);
+    if (ud) {
+      const parsed = JSON.parse(ud);
+      if (parsed.role === "admin") admins.push(u.email);
+    }
+  }
+  return admins;
+}
+async function notifyAdmins(env, subject, htmlContent) {
+  try {
+    const admins = await getAdminEmails(env);
+    if (admins.length === 0) return;
+    await sendEmail(env, admins, subject, htmlContent);
+  } catch (e) {
+    console.error("notifyAdmins error:", e);
+  }
+}
 var VALID_ROLES = ["admin", "relecteur", "correcteur"];
 var DEFAULT_ROLE = "relecteur";
 async function getSessionWithRole(request, env) {
@@ -83,46 +141,25 @@ async function handleSendCode(request, env) {
   const code = String(Math.floor(1e5 + Math.random() * 9e5));
   await env.TAFSIR_AUTH.put(`email_code:${normalizedEmail}`, code, { expirationTtl: 600 });
   await env.TAFSIR_AUTH.put(rateLimitKey, "1", { expirationTtl: 60 });
-  try {
-    const brevoKey = env.BREVO_API_KEY;
-    if (!brevoKey) {
-      console.error("BREVO_API_KEY not configured");
-      return jsonResponse({ error: "Service email non configure." }, 500);
-    }
-    const mailRes = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "api-key": brevoKey
-      },
-      body: JSON.stringify({
-        sender: { name: "Tafsir French", email: "noreply@tafsir-french.org" },
-        to: [{ email: normalizedEmail }],
-        subject: "Votre code de verification - Tafsir French",
-        htmlContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
-            <h2 style="color: #1e40af; margin-bottom: 1rem;">Verification de votre email</h2>
-            <p>Votre code de verification est :</p>
-            <div style="background: #f0f4ff; border: 2px solid #2563eb; border-radius: 8px; padding: 1rem; text-align: center; margin: 1.5rem 0;">
-              <span style="font-size: 2rem; font-weight: bold; letter-spacing: 0.3em; color: #1e40af;">${code}</span>
-            </div>
-            <p style="color: #6b7280; font-size: 0.9rem;">Ce code expire dans 10 minutes. Si vous n'avez pas demande ce code, ignorez cet email.</p>
-          </div>
-        `
-      })
-    });
-    if (!mailRes.ok) {
-      const errBody = await mailRes.json().catch(() => ({}));
-      console.error("Brevo error:", mailRes.status, JSON.stringify(errBody));
-      return jsonResponse({ error: "Impossible d'envoyer l'email. Verifiez votre adresse." }, 502);
-    }
-  } catch (e) {
-    console.error("Email send error:", e);
-    return jsonResponse({ error: "Erreur lors de l'envoi de l'email." }, 500);
+  const result = await sendEmail(
+    env,
+    normalizedEmail,
+    "Votre code de verification - Tafsir French",
+    `<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
+      <h2 style="color: #1e40af; margin-bottom: 1rem;">Verification de votre email</h2>
+      <p>Votre code de verification est :</p>
+      <div style="background: #f0f4ff; border: 2px solid #2563eb; border-radius: 8px; padding: 1rem; text-align: center; margin: 1.5rem 0;">
+        <span style="font-size: 2rem; font-weight: bold; letter-spacing: 0.3em; color: #1e40af;">${code}</span>
+      </div>
+      <p style="color: #6b7280; font-size: 0.9rem;">Ce code expire dans 10 minutes. Si vous n'avez pas demande ce code, ignorez cet email.</p>
+    </div>`
+  );
+  if (!result.ok) {
+    return jsonResponse({ error: result.error }, result.error.includes("non configure") ? 500 : 502);
   }
   return jsonResponse({ ok: true, message: "Code envoye." });
 }
-async function handleRegister(request, env) {
+async function handleRegister(request, env, ctx) {
   const { email, password, name, code } = await request.json();
   if (!email || !password || !name || !code) {
     return jsonResponse({ error: "Tous les champs sont requis (y compris le code de verification)." }, 400);
@@ -159,6 +196,19 @@ async function handleRegister(request, env) {
   await env.TAFSIR_AUTH.put(key, JSON.stringify(user));
   userList.push({ id: user.id, email: user.email, name: user.name, role: user.role, created: user.created });
   await env.TAFSIR_AUTH.put("users_list", JSON.stringify(userList));
+  if (ctx) {
+    ctx.waitUntil(notifyAdmins(
+      env,
+      "Nouvel utilisateur inscrit - Tafsir French",
+      `<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
+        <h2 style="color: #1e40af;">Nouvel utilisateur inscrit</h2>
+        <p><strong>Nom :</strong> ${escapeHtml(user.name)}</p>
+        <p><strong>Email :</strong> ${escapeHtml(user.email)}</p>
+        <p><strong>Role :</strong> ${user.role}</p>
+        <p style="color: #6b7280; font-size: 0.9rem;">Inscrit le ${user.created}</p>
+      </div>`
+    ));
+  }
   return jsonResponse({ ok: true, user: { id: user.id, email: user.email, name: user.name, role: user.role } }, 201);
 }
 async function handleLogin(request, env) {
@@ -295,7 +345,7 @@ async function handleResetPassword(request, env) {
   await env.TAFSIR_AUTH.put(key, JSON.stringify(user));
   return jsonResponse({ ok: true, message: `Mot de passe reinitialise pour ${email}.` });
 }
-async function handleCreateRoleRequest(request, env) {
+async function handleCreateRoleRequest(request, env, ctx) {
   const session = await getSessionWithRole(request, env);
   if (!session) return jsonResponse({ error: "Non authentifie." }, 401);
   if (session.role !== "relecteur") {
@@ -308,16 +358,29 @@ async function handleCreateRoleRequest(request, env) {
   if (existing) {
     return jsonResponse({ error: "Vous avez deja une demande en attente." }, 409);
   }
+  const message = (body.message || "").slice(0, 500);
   requests.push({
     id: generateId(),
     email: session.email,
     name: session.name,
     requestedRole: "correcteur",
-    message: (body.message || "").slice(0, 500),
+    message,
     status: "pending",
     created: (/* @__PURE__ */ new Date()).toISOString()
   });
   await env.TAFSIR_AUTH.put("role_requests", JSON.stringify(requests));
+  if (ctx) {
+    ctx.waitUntil(notifyAdmins(
+      env,
+      "Nouvelle demande de role - Tafsir French",
+      `<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
+        <h2 style="color: #1e40af;">Demande de promotion</h2>
+        <p><strong>${escapeHtml(session.name)}</strong> (${escapeHtml(session.email)}) demande le role de <strong>correcteur</strong>.</p>
+        ${message ? `<p><strong>Message :</strong> ${escapeHtml(message)}</p>` : ""}
+        <p style="color: #6b7280; font-size: 0.9rem;">Connectez-vous au panneau d'administration pour approuver ou refuser cette demande.</p>
+      </div>`
+    ));
+  }
   return jsonResponse({ ok: true, message: "Demande envoyee." }, 201);
 }
 async function handleMyRoleRequest(request, env) {
@@ -335,7 +398,7 @@ async function handleListRoleRequests(request, env) {
   const requests = data ? JSON.parse(data) : [];
   return jsonResponse({ requests });
 }
-async function handleResolveRoleRequest(request, env) {
+async function handleResolveRoleRequest(request, env, ctx) {
   const { error, session } = await requireRole(request, env, "admin");
   if (error) return error;
   const { id, action } = await request.json();
@@ -367,6 +430,20 @@ async function handleResolveRoleRequest(request, env) {
     }
   }
   await env.TAFSIR_AUTH.put("role_requests", JSON.stringify(requests));
+  if (ctx) {
+    const approved = req.status === "approved";
+    const statusText = approved ? "approuvee" : "refusee";
+    const roleText = approved ? `Vous avez maintenant le role de <strong>${req.requestedRole}</strong>. Deconnectez-vous et reconnectez-vous pour appliquer le changement.` : "Votre demande n'a pas ete acceptee. Contactez un administrateur pour plus d'informations.";
+    ctx.waitUntil(sendEmail(
+      env,
+      req.email,
+      `Demande de role ${statusText} - Tafsir French`,
+      `<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
+        <h2 style="color: #1e40af;">Demande de role ${statusText}</h2>
+        <p>${roleText}</p>
+      </div>`
+    ));
+  }
   return jsonResponse({ ok: true, status: req.status });
 }
 async function handleBootstrapAdmin(request, env) {
@@ -943,7 +1020,7 @@ async function handleTTS(request, env) {
 
 // ../worker/index.js
 var index_default = {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     try {
       const url = new URL(request.url);
       const { pathname } = url;
@@ -951,7 +1028,7 @@ var index_default = {
         return handleSendCode(request, env);
       }
       if (pathname === "/api/auth/register" && request.method === "POST") {
-        return handleRegister(request, env);
+        return handleRegister(request, env, ctx);
       }
       if (pathname === "/api/auth/login" && request.method === "POST") {
         return handleLogin(request, env);
@@ -975,7 +1052,7 @@ var index_default = {
         return handleResetPassword(request, env);
       }
       if (pathname === "/api/role-requests" && request.method === "POST") {
-        return handleCreateRoleRequest(request, env);
+        return handleCreateRoleRequest(request, env, ctx);
       }
       if (pathname === "/api/role-requests/mine" && request.method === "GET") {
         return handleMyRoleRequest(request, env);
@@ -984,7 +1061,7 @@ var index_default = {
         return handleListRoleRequests(request, env);
       }
       if (pathname === "/api/role-requests/resolve" && request.method === "POST") {
-        return handleResolveRoleRequest(request, env);
+        return handleResolveRoleRequest(request, env, ctx);
       }
       if (pathname === "/api/admin/export-json" && request.method === "GET") {
         return handleExportJson(request, env);

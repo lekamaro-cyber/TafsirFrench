@@ -40,6 +40,90 @@ function setCookie(name, value, maxAge) {
   return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=${maxAge}`;
 }
 
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ========== EMAIL UTILITIES ==========
+
+/**
+ * Send an email via Brevo (ex-Sendinblue).
+ * @param {object} env - Worker env with BREVO_API_KEY
+ * @param {string|string[]} to - Recipient email(s)
+ * @param {string} subject
+ * @param {string} htmlContent
+ * @returns {{ ok: boolean, error?: string }}
+ */
+async function sendEmail(env, to, subject, htmlContent) {
+  try {
+    const brevoKey = env.BREVO_API_KEY;
+    if (!brevoKey) {
+      console.error('BREVO_API_KEY not configured');
+      return { ok: false, error: 'Service email non configure.' };
+    }
+
+    const recipients = Array.isArray(to)
+      ? to.map(email => ({ email }))
+      : [{ email: to }];
+
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'api-key': brevoKey,
+      },
+      body: JSON.stringify({
+        sender: { name: 'Tafsir French', email: 'noreply@tafsir-french.org' },
+        to: recipients,
+        subject,
+        htmlContent,
+      }),
+    });
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      console.error('Brevo error:', res.status, JSON.stringify(errBody));
+      return { ok: false, error: 'Impossible d\'envoyer l\'email.' };
+    }
+
+    return { ok: true };
+  } catch (e) {
+    console.error('Email send error:', e);
+    return { ok: false, error: 'Erreur lors de l\'envoi de l\'email.' };
+  }
+}
+
+/**
+ * Get all admin emails from KV (checks individual user records for authoritative role).
+ */
+async function getAdminEmails(env) {
+  const listData = await env.TAFSIR_AUTH.get('users_list');
+  if (!listData) return [];
+  const userList = JSON.parse(listData);
+  const admins = [];
+  for (const u of userList) {
+    const ud = await env.TAFSIR_AUTH.get(`user:${u.email}`);
+    if (ud) {
+      const parsed = JSON.parse(ud);
+      if (parsed.role === 'admin') admins.push(u.email);
+    }
+  }
+  return admins;
+}
+
+/**
+ * Fire-and-forget notification to all admins.
+ */
+async function notifyAdmins(env, subject, htmlContent) {
+  try {
+    const admins = await getAdminEmails(env);
+    if (admins.length === 0) return;
+    await sendEmail(env, admins, subject, htmlContent);
+  } catch (e) {
+    console.error('notifyAdmins error:', e);
+  }
+}
+
 // ========== ROLES ==========
 // admin: full access (manage users, approve corrections, everything)
 // relecteur: can vote, report errors, approve corrections
@@ -117,51 +201,26 @@ export async function handleSendCode(request, env) {
   // Rate limit: 60 seconds
   await env.TAFSIR_AUTH.put(rateLimitKey, '1', { expirationTtl: 60 });
 
-  // Send email via Brevo (ex-Sendinblue)
-  try {
-    const brevoKey = env.BREVO_API_KEY;
-    if (!brevoKey) {
-      console.error('BREVO_API_KEY not configured');
-      return jsonResponse({ error: 'Service email non configure.' }, 500);
-    }
-
-    const mailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'api-key': brevoKey,
-      },
-      body: JSON.stringify({
-        sender: { name: 'Tafsir French', email: 'noreply@tafsir-french.org' },
-        to: [{ email: normalizedEmail }],
-        subject: 'Votre code de verification - Tafsir French',
-        htmlContent: `
-          <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
-            <h2 style="color: #1e40af; margin-bottom: 1rem;">Verification de votre email</h2>
-            <p>Votre code de verification est :</p>
-            <div style="background: #f0f4ff; border: 2px solid #2563eb; border-radius: 8px; padding: 1rem; text-align: center; margin: 1.5rem 0;">
-              <span style="font-size: 2rem; font-weight: bold; letter-spacing: 0.3em; color: #1e40af;">${code}</span>
-            </div>
-            <p style="color: #6b7280; font-size: 0.9rem;">Ce code expire dans 10 minutes. Si vous n'avez pas demande ce code, ignorez cet email.</p>
-          </div>
-        `,
-      }),
-    });
-
-    if (!mailRes.ok) {
-      const errBody = await mailRes.json().catch(() => ({}));
-      console.error('Brevo error:', mailRes.status, JSON.stringify(errBody));
-      return jsonResponse({ error: 'Impossible d\'envoyer l\'email. Verifiez votre adresse.' }, 502);
-    }
-  } catch (e) {
-    console.error('Email send error:', e);
-    return jsonResponse({ error: 'Erreur lors de l\'envoi de l\'email.' }, 500);
+  // Send verification code email
+  const result = await sendEmail(env, normalizedEmail,
+    'Votre code de verification - Tafsir French',
+    `<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
+      <h2 style="color: #1e40af; margin-bottom: 1rem;">Verification de votre email</h2>
+      <p>Votre code de verification est :</p>
+      <div style="background: #f0f4ff; border: 2px solid #2563eb; border-radius: 8px; padding: 1rem; text-align: center; margin: 1.5rem 0;">
+        <span style="font-size: 2rem; font-weight: bold; letter-spacing: 0.3em; color: #1e40af;">${code}</span>
+      </div>
+      <p style="color: #6b7280; font-size: 0.9rem;">Ce code expire dans 10 minutes. Si vous n'avez pas demande ce code, ignorez cet email.</p>
+    </div>`
+  );
+  if (!result.ok) {
+    return jsonResponse({ error: result.error }, result.error.includes('non configure') ? 500 : 502);
   }
 
   return jsonResponse({ ok: true, message: 'Code envoye.' });
 }
 
-export async function handleRegister(request, env) {
+export async function handleRegister(request, env, ctx) {
   const { email, password, name, code } = await request.json();
   if (!email || !password || !name || !code) {
     return jsonResponse({ error: 'Tous les champs sont requis (y compris le code de verification).' }, 400);
@@ -210,6 +269,20 @@ export async function handleRegister(request, env) {
   // Track user in list
   userList.push({ id: user.id, email: user.email, name: user.name, role: user.role, created: user.created });
   await env.TAFSIR_AUTH.put('users_list', JSON.stringify(userList));
+
+  // Notify admins of new registration
+  if (ctx) {
+    ctx.waitUntil(notifyAdmins(env,
+      'Nouvel utilisateur inscrit - Tafsir French',
+      `<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
+        <h2 style="color: #1e40af;">Nouvel utilisateur inscrit</h2>
+        <p><strong>Nom :</strong> ${escapeHtml(user.name)}</p>
+        <p><strong>Email :</strong> ${escapeHtml(user.email)}</p>
+        <p><strong>Role :</strong> ${user.role}</p>
+        <p style="color: #6b7280; font-size: 0.9rem;">Inscrit le ${user.created}</p>
+      </div>`
+    ));
+  }
 
   return jsonResponse({ ok: true, user: { id: user.id, email: user.email, name: user.name, role: user.role } }, 201);
 }
@@ -410,7 +483,7 @@ export async function handleResetPassword(request, env) {
  * Body: { message?: string }
  * A relecteur requests promotion to correcteur.
  */
-export async function handleCreateRoleRequest(request, env) {
+export async function handleCreateRoleRequest(request, env, ctx) {
   const session = await getSessionWithRole(request, env);
   if (!session) return jsonResponse({ error: 'Non authentifie.' }, 401);
 
@@ -428,17 +501,33 @@ export async function handleCreateRoleRequest(request, env) {
     return jsonResponse({ error: 'Vous avez deja une demande en attente.' }, 409);
   }
 
+  const message = (body.message || '').slice(0, 500);
+
   requests.push({
     id: generateId(),
     email: session.email,
     name: session.name,
     requestedRole: 'correcteur',
-    message: (body.message || '').slice(0, 500),
+    message,
     status: 'pending',
     created: new Date().toISOString(),
   });
 
   await env.TAFSIR_AUTH.put('role_requests', JSON.stringify(requests));
+
+  // Notify admins of new role request
+  if (ctx) {
+    ctx.waitUntil(notifyAdmins(env,
+      'Nouvelle demande de role - Tafsir French',
+      `<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
+        <h2 style="color: #1e40af;">Demande de promotion</h2>
+        <p><strong>${escapeHtml(session.name)}</strong> (${escapeHtml(session.email)}) demande le role de <strong>correcteur</strong>.</p>
+        ${message ? `<p><strong>Message :</strong> ${escapeHtml(message)}</p>` : ''}
+        <p style="color: #6b7280; font-size: 0.9rem;">Connectez-vous au panneau d'administration pour approuver ou refuser cette demande.</p>
+      </div>`
+    ));
+  }
+
   return jsonResponse({ ok: true, message: 'Demande envoyee.' }, 201);
 }
 
@@ -474,7 +563,7 @@ export async function handleListRoleRequests(request, env) {
  * Body: { id: string, action: 'approve' | 'deny' }
  * Admin approves or denies a role request.
  */
-export async function handleResolveRoleRequest(request, env) {
+export async function handleResolveRoleRequest(request, env, ctx) {
   const { error, session } = await requireRole(request, env, 'admin');
   if (error) return error;
 
@@ -514,6 +603,24 @@ export async function handleResolveRoleRequest(request, env) {
   }
 
   await env.TAFSIR_AUTH.put('role_requests', JSON.stringify(requests));
+
+  // Notify the user of the decision
+  if (ctx) {
+    const approved = req.status === 'approved';
+    const statusText = approved ? 'approuvee' : 'refusee';
+    const roleText = approved
+      ? `Vous avez maintenant le role de <strong>${req.requestedRole}</strong>. Deconnectez-vous et reconnectez-vous pour appliquer le changement.`
+      : 'Votre demande n\'a pas ete acceptee. Contactez un administrateur pour plus d\'informations.';
+
+    ctx.waitUntil(sendEmail(env, req.email,
+      `Demande de role ${statusText} - Tafsir French`,
+      `<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 2rem;">
+        <h2 style="color: #1e40af;">Demande de role ${statusText}</h2>
+        <p>${roleText}</p>
+      </div>`
+    ));
+  }
+
   return jsonResponse({ ok: true, status: req.status });
 }
 

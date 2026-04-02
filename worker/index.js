@@ -4,7 +4,7 @@ import { handleCreateCorrection, handleReviewCorrection, handleApplyCorrection, 
 import { handleTTS } from './tts.js';
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     try {
     const url = new URL(request.url);
     const { pathname } = url;
@@ -14,7 +14,7 @@ export default {
       return handleSendCode(request, env);
     }
     if (pathname === '/api/auth/register' && request.method === 'POST') {
-      return handleRegister(request, env);
+      return handleRegister(request, env, ctx);
     }
     if (pathname === '/api/auth/login' && request.method === 'POST') {
       return handleLogin(request, env);
@@ -41,7 +41,7 @@ export default {
     }
     // Role request routes
     if (pathname === '/api/role-requests' && request.method === 'POST') {
-      return handleCreateRoleRequest(request, env);
+      return handleCreateRoleRequest(request, env, ctx);
     }
     if (pathname === '/api/role-requests/mine' && request.method === 'GET') {
       return handleMyRoleRequest(request, env);
@@ -50,7 +50,7 @@ export default {
       return handleListRoleRequests(request, env);
     }
     if (pathname === '/api/role-requests/resolve' && request.method === 'POST') {
-      return handleResolveRoleRequest(request, env);
+      return handleResolveRoleRequest(request, env, ctx);
     }
     if (pathname === '/api/admin/export-json' && request.method === 'GET') {
       return handleExportJson(request, env);
