@@ -354,6 +354,39 @@ export async function handleMe(request, env) {
   return jsonResponse({ user: { ...session, role: user.role || DEFAULT_ROLE } });
 }
 
+/**
+ * POST /api/auth/change-password
+ * Body: { currentPassword: string, newPassword: string }
+ * Allows any authenticated user to change their own password.
+ */
+export async function handleChangePassword(request, env) {
+  const session = await getSessionWithRole(request, env);
+  if (!session) return jsonResponse({ error: 'Non authentifie.' }, 401);
+
+  const { currentPassword, newPassword } = await request.json();
+  if (!currentPassword || !newPassword) {
+    return jsonResponse({ error: 'Mot de passe actuel et nouveau mot de passe requis.' }, 400);
+  }
+  if (newPassword.length < 6) {
+    return jsonResponse({ error: 'Le nouveau mot de passe doit faire au moins 6 caracteres.' }, 400);
+  }
+
+  const key = `user:${session.email}`;
+  const userData = await env.TAFSIR_AUTH.get(key);
+  if (!userData) return jsonResponse({ error: 'Utilisateur introuvable.' }, 404);
+
+  const user = JSON.parse(userData);
+  const valid = await verifyHash(currentPassword, user.password);
+  if (!valid) {
+    return jsonResponse({ error: 'Mot de passe actuel incorrect.' }, 403);
+  }
+
+  user.password = await createHash(newPassword);
+  await env.TAFSIR_AUTH.put(key, JSON.stringify(user));
+
+  return jsonResponse({ ok: true, message: 'Mot de passe modifie avec succes.' });
+}
+
 // ========== USER MANAGEMENT (Admin only) ==========
 
 /**

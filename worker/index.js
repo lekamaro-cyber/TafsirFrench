@@ -1,4 +1,4 @@
-import { handleSendCode, handleRegister, handleLogin, handleLogout, handleMe, handleListUsers, handleChangeRole, handleDeleteUser, handleResetPassword, handleBootstrapAdmin, handleCreateRoleRequest, handleMyRoleRequest, handleListRoleRequests, handleResolveRoleRequest } from './auth.js';
+import { handleSendCode, handleRegister, handleLogin, handleLogout, handleMe, handleChangePassword, handleListUsers, handleChangeRole, handleDeleteUser, handleResetPassword, handleBootstrapAdmin, handleCreateRoleRequest, handleMyRoleRequest, handleListRoleRequests, handleResolveRoleRequest } from './auth.js';
 import { handleCastVote, handleRemoveVote, handleGetSurahVotes, handleGetVotesSummary, handleInitSurah, handleCreateReport, handleResolveReport, handleGetSurahReports } from './votes.js';
 import { handleCreateCorrection, handleReviewCorrection, handleApplyCorrection, handleGetSurahCorrections, handleGetPendingCorrections, handleExportJson } from './corrections.js';
 import { handleTTS } from './tts.js';
@@ -24,6 +24,9 @@ export default {
     }
     if (pathname === '/api/auth/me' && request.method === 'GET') {
       return handleMe(request, env);
+    }
+    if (pathname === '/api/auth/change-password' && request.method === 'POST') {
+      return handleChangePassword(request, env);
     }
 
     // User management API routes (admin only)
