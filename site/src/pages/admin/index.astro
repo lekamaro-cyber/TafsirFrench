@@ -48,7 +48,7 @@ const all = getAllSurahs();
     <div class="admin-section">
       <h2>Validation collaborative</h2>
       <p style="font-size: 0.9rem; color: var(--color-text-muted); margin-bottom: 1rem;">
-        Chaque verset necessite 5 votes pour etre valide. Une fois tous les versets valides, la sourate est automatiquement validee.
+        Chaque verset necessite 5 votes pour etre valide. Une fois tous les versets valides, la sourate est automatiquement publiee sur le site public.
       </p>
       <div id="vote-progress-container" style="color: var(--color-text-muted); font-size: 0.9rem;">
         Chargement des donnees de vote...
@@ -68,6 +68,10 @@ const all = getAllSurahs();
       <button id="nav-export" class="nav-card" style="display: none; cursor: pointer; background: none; text-align: left;">
         <strong>Telecharger le JSON</strong>
         <span>Exporter le tafsir avec corrections appliquees</span>
+      </button>
+      <button id="nav-check-publish" class="nav-card" style="display: none; cursor: pointer; background: none; text-align: left; border-color: #10b981;">
+        <strong>Publier les validees</strong>
+        <span>Verifier et publier les sourates entierement validees</span>
       </button>
       <button id="nav-role-request" class="nav-card" style="display: none; cursor: pointer; background: none; text-align: left; border-color: #10b981;">
         <strong>Devenir correcteur</strong>
@@ -258,6 +262,7 @@ const all = getAllSurahs();
         if (user.role === 'admin') {
           document.getElementById('nav-users').style.display = 'block';
           document.getElementById('nav-export').style.display = 'flex';
+          document.getElementById('nav-check-publish').style.display = 'flex';
         }
         if (user.role === 'relecteur') {
           const roleBtn = document.getElementById('nav-role-request');
@@ -433,6 +438,34 @@ const all = getAllSurahs();
       } catch (err) {
         errDiv.textContent = 'Erreur de connexion.';
         errDiv.style.display = 'block';
+      }
+    });
+
+    document.getElementById('nav-check-publish')?.addEventListener('click', async () => {
+      const btn = document.getElementById('nav-check-publish');
+      btn.querySelector('span').textContent = 'Verification en cours...';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/votes/check-publish', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || 'Erreur.');
+          return;
+        }
+        if (data.newlyPublished.length > 0) {
+          btn.querySelector('span').textContent = data.message;
+          btn.style.borderColor = '#22c55e';
+        } else {
+          btn.querySelector('span').textContent = data.message;
+        }
+        setTimeout(() => {
+          btn.querySelector('span').textContent = 'Verifier et publier les sourates entierement validees';
+          btn.disabled = false;
+        }, 4000);
+      } catch {
+        alert('Erreur de connexion.');
+        btn.querySelector('span').textContent = 'Verifier et publier les sourates entierement validees';
+        btn.disabled = false;
       }
     });
 

@@ -207,6 +207,9 @@ async function checkSurahValidation(surahNumber, env) {
       date: new Date().toISOString(),
     }));
 
+    // Auto-publish this surah
+    await publishSurah(surahNumber, env);
+
     // Update global summary
     await updateGlobalSummary(surahNumber, totalVerses, totalVerses, env);
   }
@@ -247,6 +250,84 @@ async function updateGlobalSummary(surahNumber, validatedCount, totalVerses, env
   };
 
   await env.TAFSIR_AUTH.put(summaryKey, JSON.stringify(summary));
+}
+
+/**
+ * Add a surah to the published list in KV.
+ */
+async function publishSurah(surahNumber, env) {
+  const key = 'published_surahs';
+  const data = await env.TAFSIR_AUTH.get(key);
+  const published = data ? JSON.parse(data) : [];
+
+  const num = parseInt(surahNumber);
+  if (!published.includes(num)) {
+    published.push(num);
+    published.sort((a, b) => a - b);
+    await env.TAFSIR_AUTH.put(key, JSON.stringify(published));
+  }
+}
+
+/**
+ * GET /api/published-surahs
+ * Public endpoint (no auth) - returns list of published surah numbers.
+ */
+export async function handleGetPublishedSurahs(request, env) {
+  const data = await env.TAFSIR_AUTH.get('published_surahs');
+  const published = data ? JSON.parse(data) : [];
+  return jsonResponse({ surahs: published });
+}
+
+/**
+ * POST /api/votes/check-publish
+ * Admin only - retroactively publishes all validated surahs.
+ */
+export async function handleCheckPublish(request, env) {
+  const user = await getSession(request, env);
+  if (!user) return jsonResponse({ error: 'Non authentifie.' }, 401);
+
+  // Check admin role
+  const userData = await env.TAFSIR_AUTH.get(`user:${user.email}`);
+  if (!userData) return jsonResponse({ error: 'Utilisateur introuvable.' }, 404);
+  const userRecord = JSON.parse(userData);
+  if (userRecord.role !== 'admin') {
+    return jsonResponse({ error: 'Acces reserve aux administrateurs.' }, 403);
+  }
+
+  const newlyPublished = [];
+
+  // Check all 114 surahs
+  for (let i = 1; i <= 114; i++) {
+    const validatedData = await env.TAFSIR_AUTH.get(`surah_validated:${i}`);
+    if (validatedData) {
+      const existing = await env.TAFSIR_AUTH.get('published_surahs');
+      const published = existing ? JSON.parse(existing) : [];
+      if (!published.includes(i)) {
+        newlyPublished.push(i);
+      }
+    }
+  }
+
+  // Publish all validated surahs at once
+  if (newlyPublished.length > 0) {
+    const data = await env.TAFSIR_AUTH.get('published_surahs');
+    const published = data ? JSON.parse(data) : [];
+    for (const num of newlyPublished) {
+      if (!published.includes(num)) {
+        published.push(num);
+      }
+    }
+    published.sort((a, b) => a - b);
+    await env.TAFSIR_AUTH.put('published_surahs', JSON.stringify(published));
+  }
+
+  return jsonResponse({
+    ok: true,
+    newlyPublished,
+    message: newlyPublished.length > 0
+      ? `${newlyPublished.length} sourate(s) publiee(s) retroactivement.`
+      : 'Aucune nouvelle sourate a publier.',
+  });
 }
 
 // ========== ERROR REPORTS ==========

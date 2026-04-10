@@ -1,5 +1,5 @@
 import { handleSendCode, handleRegister, handleLogin, handleLogout, handleMe, handleChangePassword, handleListUsers, handleChangeRole, handleDeleteUser, handleResetPassword, handleBootstrapAdmin, handleCreateRoleRequest, handleMyRoleRequest, handleListRoleRequests, handleResolveRoleRequest } from './auth.js';
-import { handleCastVote, handleRemoveVote, handleGetSurahVotes, handleGetVotesSummary, handleInitSurah, handleCreateReport, handleResolveReport, handleGetSurahReports } from './votes.js';
+import { handleCastVote, handleRemoveVote, handleGetSurahVotes, handleGetVotesSummary, handleInitSurah, handleGetPublishedSurahs, handleCheckPublish, handleCreateReport, handleResolveReport, handleGetSurahReports } from './votes.js';
 import { handleCreateCorrection, handleReviewCorrection, handleApplyCorrection, handleGetSurahCorrections, handleGetPendingCorrections, handleExportJson } from './corrections.js';
 import { handleTTS } from './tts.js';
 
@@ -62,6 +62,11 @@ export default {
       return handleBootstrapAdmin(request, env);
     }
 
+    // Public API: published surahs (no auth)
+    if (pathname === '/api/published-surahs' && request.method === 'GET') {
+      return handleGetPublishedSurahs(request, env);
+    }
+
     // Vote API routes
     if (pathname === '/api/votes/cast' && request.method === 'POST') {
       return handleCastVote(request, env);
@@ -77,6 +82,9 @@ export default {
     }
     if (pathname === '/api/votes/init-surah' && request.method === 'POST') {
       return handleInitSurah(request, env);
+    }
+    if (pathname === '/api/votes/check-publish' && request.method === 'POST') {
+      return handleCheckPublish(request, env);
     }
 
     // Report API routes

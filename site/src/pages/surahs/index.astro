@@ -1,31 +1,61 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { getPublishedSurahs } from '../../lib/content.js';
+import { getAllSurahs } from '../../lib/content.js';
 
-const surahs = getPublishedSurahs();
+const surahs = getAllSurahs();
 ---
 
 <BaseLayout title="Sourates" description="Liste des sourates du Coran avec leur tafsir (exegese) en francais. Parcourez les 114 sourates et lisez le commentaire d'Ibn Kathir.">
   <div class="container">
     <section style="padding: 2rem 0;">
-      <h1 style="font-size: 2rem; margin-bottom: 1.5rem;">Sourates disponibles</h1>
+      <h1 style="font-size: 2rem; margin-bottom: 1.5rem;">Sourates publiees</h1>
 
-      {surahs.length === 0 ? (
-        <p style="color: var(--color-text-muted);">Aucune sourate publiee pour le moment.</p>
-      ) : (
-        <div class="surah-grid">
-          {surahs.map(surah => (
-            <a href={`/surahs/${surah.slug}/`} class="surah-card" style="text-decoration: none; color: inherit;">
-              <span class="number">{surah.number}</span>
-              <h3>{surah.name_fr}</h3>
-              <div class="name-ar">{surah.name_ar}</div>
-              <div class="meta">
-                {surah.verses} versets &middot; {surah.type}
-              </div>
-            </a>
-          ))}
-        </div>
-      )}
+      <p id="loading-msg" style="color: var(--color-text-muted);">Chargement des sourates publiees...</p>
+      <p id="empty-msg" style="color: var(--color-text-muted); display: none;">Aucune sourate publiee pour le moment.</p>
+
+      <div class="surah-grid">
+        {surahs.map(surah => (
+          <a href={`/surahs/${surah.slug}/`} class="surah-card" data-surah={surah.number} style="text-decoration: none; color: inherit; display: none;">
+            <span class="number">{surah.number}</span>
+            <h3>{surah.name_fr}</h3>
+            <div class="name-ar">{surah.name_ar}</div>
+            <div class="meta">
+              {surah.verses} versets &middot; {surah.type}
+            </div>
+          </a>
+        ))}
+      </div>
     </section>
   </div>
 </BaseLayout>
+
+<script>
+  async function loadPublishedSurahs() {
+    const loadingMsg = document.getElementById('loading-msg');
+    const emptyMsg = document.getElementById('empty-msg');
+    try {
+      const res = await fetch('/api/published-surahs');
+      if (!res.ok) throw new Error('Erreur API');
+      const data = await res.json();
+      const published = data.surahs || [];
+
+      loadingMsg.style.display = 'none';
+
+      if (published.length === 0) {
+        emptyMsg.style.display = '';
+        return;
+      }
+
+      const cards = document.querySelectorAll('.surah-card[data-surah]');
+      cards.forEach(card => {
+        const num = parseInt(card.getAttribute('data-surah'));
+        if (published.includes(num)) {
+          card.style.display = '';
+        }
+      });
+    } catch (err) {
+      loadingMsg.textContent = 'Erreur lors du chargement des sourates.';
+    }
+  }
+  loadPublishedSurahs();
+</script>

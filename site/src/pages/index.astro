@@ -1,8 +1,8 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { getPublishedSurahs } from '../lib/content.js';
+import { getAllSurahs } from '../lib/content.js';
 
-const surahs = getPublishedSurahs();
+const surahs = getAllSurahs();
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -114,29 +114,59 @@ const jsonLd = {
 
   <!-- Sourates publiees -->
   <div class="container">
-    {surahs.length === 0 ? (
-      <div style="text-align: center; padding: 3rem 0; color: var(--color-text-muted);">
-        <p style="font-size: 1.2rem;">Aucune sourate publiee pour le moment.</p>
-        <p style="margin-top: 0.5rem;">
-          <a href="/admin/">Acceder au panneau de gestion</a> pour relire et publier le contenu.
-        </p>
-      </div>
-    ) : (
-      <Fragment>
-        <h2 class="section-title">Sourates publiees</h2>
-        <div class="surah-grid">
-          {surahs.map(surah => (
-            <a href={`/surahs/${surah.slug}/`} class="surah-card" style="text-decoration: none; color: inherit;">
-              <span class="number">{surah.number}</span>
-              <h3>{surah.name_fr}</h3>
-              <div class="name-ar">{surah.name_ar}</div>
-              <div class="meta">
-                {surah.verses} versets &middot; {surah.type}
-              </div>
-            </a>
-          ))}
-        </div>
-      </Fragment>
-    )}
+    <div id="surahs-loading" style="text-align: center; padding: 3rem 0; color: var(--color-text-muted);">
+      <p style="font-size: 1.2rem;">Chargement des sourates publiees...</p>
+    </div>
+    <div id="surahs-empty" style="text-align: center; padding: 3rem 0; color: var(--color-text-muted); display: none;">
+      <p style="font-size: 1.2rem;">Aucune sourate publiee pour le moment.</p>
+      <p style="margin-top: 0.5rem;">
+        <a href="/admin/">Acceder au panneau de gestion</a> pour relire et publier le contenu.
+      </p>
+    </div>
+    <h2 class="section-title" id="surahs-title" style="display: none;">Sourates publiees</h2>
+    <div class="surah-grid">
+      {surahs.map(surah => (
+        <a href={`/surahs/${surah.slug}/`} class="surah-card" data-surah={surah.number} style="text-decoration: none; color: inherit; display: none;">
+          <span class="number">{surah.number}</span>
+          <h3>{surah.name_fr}</h3>
+          <div class="name-ar">{surah.name_ar}</div>
+          <div class="meta">
+            {surah.verses} versets &middot; {surah.type}
+          </div>
+        </a>
+      ))}
+    </div>
   </div>
+  <script>
+    async function loadPublishedSurahs() {
+      const loadingEl = document.getElementById('surahs-loading');
+      const emptyEl = document.getElementById('surahs-empty');
+      const titleEl = document.getElementById('surahs-title');
+      try {
+        const res = await fetch('/api/published-surahs');
+        if (!res.ok) throw new Error('Erreur API');
+        const data = await res.json();
+        const published = data.surahs || [];
+
+        loadingEl.style.display = 'none';
+
+        if (published.length === 0) {
+          emptyEl.style.display = '';
+          return;
+        }
+
+        titleEl.style.display = '';
+        const cards = document.querySelectorAll('.surah-card[data-surah]');
+        cards.forEach(card => {
+          const num = parseInt(card.getAttribute('data-surah'));
+          if (published.includes(num)) {
+            card.style.display = '';
+          }
+        });
+      } catch (err) {
+        loadingEl.textContent = 'Erreur lors du chargement des sourates.';
+      }
+    }
+    loadPublishedSurahs();
+  </script>
 </BaseLayout>

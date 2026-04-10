@@ -1,9 +1,9 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { getPublishedSurahs, getSurahMeta, getSurahTafsir } from '../../lib/content.js';
+import { getAllSurahs, getSurahMeta, getSurahTafsir } from '../../lib/content.js';
 
 export function getStaticPaths() {
-  const surahs = getPublishedSurahs();
+  const surahs = getAllSurahs();
   return surahs.map(s => ({
     params: { slug: s.slug },
     props: { surahNumber: s.number },

@@ -664,6 +664,7 @@ async function checkSurahValidation(surahNumber, env) {
       validated: true,
       date: (/* @__PURE__ */ new Date()).toISOString()
     }));
+    await publishSurah(surahNumber, env);
     await updateGlobalSummary(surahNumber, totalVerses, totalVerses, env);
   }
   return allValidated;
@@ -690,6 +691,59 @@ async function updateGlobalSummary(surahNumber, validatedCount, totalVerses, env
     lastUpdate: (/* @__PURE__ */ new Date()).toISOString()
   };
   await env.TAFSIR_AUTH.put(summaryKey, JSON.stringify(summary));
+}
+async function publishSurah(surahNumber, env) {
+  const key = "published_surahs";
+  const data = await env.TAFSIR_AUTH.get(key);
+  const published = data ? JSON.parse(data) : [];
+  const num = parseInt(surahNumber);
+  if (!published.includes(num)) {
+    published.push(num);
+    published.sort((a, b) => a - b);
+    await env.TAFSIR_AUTH.put(key, JSON.stringify(published));
+  }
+}
+async function handleGetPublishedSurahs(request, env) {
+  const data = await env.TAFSIR_AUTH.get("published_surahs");
+  const published = data ? JSON.parse(data) : [];
+  return jsonResponse2({ surahs: published });
+}
+async function handleCheckPublish(request, env) {
+  const user = await getSession(request, env);
+  if (!user) return jsonResponse2({ error: "Non authentifie." }, 401);
+  const userData = await env.TAFSIR_AUTH.get(`user:${user.email}`);
+  if (!userData) return jsonResponse2({ error: "Utilisateur introuvable." }, 404);
+  const userRecord = JSON.parse(userData);
+  if (userRecord.role !== "admin") {
+    return jsonResponse2({ error: "Acces reserve aux administrateurs." }, 403);
+  }
+  const newlyPublished = [];
+  for (let i = 1; i <= 114; i++) {
+    const validatedData = await env.TAFSIR_AUTH.get(`surah_validated:${i}`);
+    if (validatedData) {
+      const existing = await env.TAFSIR_AUTH.get("published_surahs");
+      const published = existing ? JSON.parse(existing) : [];
+      if (!published.includes(i)) {
+        newlyPublished.push(i);
+      }
+    }
+  }
+  if (newlyPublished.length > 0) {
+    const data = await env.TAFSIR_AUTH.get("published_surahs");
+    const published = data ? JSON.parse(data) : [];
+    for (const num of newlyPublished) {
+      if (!published.includes(num)) {
+        published.push(num);
+      }
+    }
+    published.sort((a, b) => a - b);
+    await env.TAFSIR_AUTH.put("published_surahs", JSON.stringify(published));
+  }
+  return jsonResponse2({
+    ok: true,
+    newlyPublished,
+    message: newlyPublished.length > 0 ? `${newlyPublished.length} sourate(s) publiee(s) retroactivement.` : "Aucune nouvelle sourate a publier."
+  });
 }
 async function handleCreateReport(request, env) {
   const user = await getSession(request, env);
@@ -1094,6 +1148,9 @@ var index_default = {
       if (pathname === "/api/admin/bootstrap" && request.method === "POST") {
         return handleBootstrapAdmin(request, env);
       }
+      if (pathname === "/api/published-surahs" && request.method === "GET") {
+        return handleGetPublishedSurahs(request, env);
+      }
       if (pathname === "/api/votes/cast" && request.method === "POST") {
         return handleCastVote(request, env);
       }
@@ -1108,6 +1165,9 @@ var index_default = {
       }
       if (pathname === "/api/votes/init-surah" && request.method === "POST") {
         return handleInitSurah(request, env);
+      }
+      if (pathname === "/api/votes/check-publish" && request.method === "POST") {
+        return handleCheckPublish(request, env);
       }
       if (pathname === "/api/reports/create" && request.method === "POST") {
         return handleCreateReport(request, env);
